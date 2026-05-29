@@ -86,7 +86,7 @@ exit 0
 | `log` / `info` / `warn` / `err` | one arg | Plain log lines, with severity prefix. |
 | `sect`   | one arg | Emits a `=== <header> ===` divider. Use once per section. |
 | `pass` / `fail` / `skip` | one arg (label) | Explicit result emission. `pass`/`fail` increment counters. `skip` doesn't. |
-| `wait_for_port` | `wait_for_port <port> [timeout]` | Polls 127.0.0.1:port for a LISTEN. Returns 0/1. |
+| `wait_for_port` | `wait_for_port <port> [timeout]` | Polls 127.0.0.1:port for a LISTEN. Returns 0/1. **Use this instead of `nc -z` — BSD `nc` and GNU `nc` disagree on flags (BSD: `-z host port`, GNU: `-zv host port`); same script breaks crossing macOS↔Linux.** |
 | `term_a_start` | `term_a_start "<slug>" <cmd> [args...]` | Detached tmux pty session. Use for any TTY-required SUT command. |
 | `term_a_wait_port` | `term_a_wait_port <port> [timeout]` | Same as `wait_for_port` but on the active tmux session, with diagnostics on fail. |
 | `term_a_pane_grep` | `term_a_pane_grep "<slug>" "<regex>" [timeout]` | Polls the pane buffer for a regex match. |
@@ -176,6 +176,10 @@ Each rule has a real failure attached. Provenance in parentheses.
 6. **Never blanket-delete shared host state.** If a section writes into `~/.<anything-the-user-also-uses>` (e.g., `~/.ssh/known_hosts`, `~/.config/foo`), stash + restore in Teardown. Don't `rm -rf ~/.config/foo` outright.
 7. **Background processes inside containers need `nohup ... & disown`.** Bare `&` dies on the parent shell's `exit` (SIGHUP). PM2-managed apps survive because PM2 reparents to PID 1; manual `&` does not.
 8. **Drift / image-rebuild tests rebuild the SUT after editing source resources.** If the SUT bakes resources at compile time (Bun's `import ... with { type: "text" }`, Go's `embed`, Rust's `include_str!`), editing the resource file alone has no effect on the running binary. Step pattern: edit resource → rebuild via `BUILD_CMD` → invoke SUT.
+9. **Hooks and helpers must use `command rm` / `command mv`.** A user's interactive aliases (`alias rm='rm -i'`, `alias mv='mv -i'`) inherit into `pre_run` / `post_run` / `reset_cmd` and any helper sourced by `.smokerc`. Bare `rm` / `mv` then prompt for confirmation and the run hangs. `command <bin>` bypasses both functions and aliases. (Originating: a `reset_cmd` helper hung indefinitely in non-interactive context; the user's `rm -i` alias was waiting for stdin.)
+10. **Filter PATH by exact dir, not by binary-name substring.** When a section needs to hide a binary from PATH (proving fallback behavior), `dirname $(which <bin>)` first, then strip that exact path component. `grep -v <bin-name>` on PATH components silently misses generic dirs (`~/.bun/bin/portless` doesn't contain "portless" as a substring; the filter matches nothing and the binary stays on PATH).
+11. **Don't assert on a JSON path that varies by tool version.** Tools rewrite their config schemas across releases (`jq '.plugins | keys'` returns `[]` even when the plugin is installed because the new version writes a different file/key). Assert via multiple paths and accept any: directory existence, `find` for the name, AND `grep -q` for a substring of the canonical config file. (Originating: a plugin-isolation §3 assertion failed on a real PASS because claude rewrote `installed_plugins.json` shape.)
+12. **Renumbered sections must rename their pdir to match.** If you renumber §3 → §2, the step file's `pdir="$SMOKE_ROOT/<topic>-s${SECTION_NUM}"` updates automatically (it uses `$SECTION_NUM`), but any HARD-CODED `~/smoke/<topic>-3/` paths in the file body don't. The grep gate (§9 check 7) flags `<topic>-N/` paths that don't match the section's filename number.
 
 ---
 
@@ -203,11 +207,20 @@ grep -nE '^\s*sleep [0-9]{2,}' "$F"
 # 5. /tmp/ as project dir (redirects for log files are OK)
 grep -nE '\B/tmp/[a-zA-Z]' "$F" | grep -vE '>[[:space:]]*/tmp/|/tmp/[a-zA-Z._-]+\.(log|out|err|sha)'
 
-# 6. zsh -n syntax check
+# 6. nc -z probe — use wait_for_port (BSD/GNU nc flags disagree)
+grep -nE '\bnc -z' "$F"
+
+# 7. Hard-coded section-dir number that doesn't match the file's NN prefix
+fname=$(basename "$F")          # e.g. 03-foo.zsh
+nn=${fname%%-*}                 # 03
+topic=$(basename "$(dirname "$(dirname "$F")")")   # parent's parent dir name
+grep -nE "${topic}-[0-9]+" "$F" | grep -vE "${topic}-${nn}\\b|${topic}-\\\$\\{SECTION_NUM\\}|${topic}-s\\\$\\{SECTION_NUM\\}"
+
+# 8. zsh -n syntax check
 zsh -n "$F" && echo "syntax OK"
 ```
 
-Hits on 1, 2, 3, or 5 → fix. Hits on 4 → confirm the long sleep is intentional + add a comment explaining why. Check 6 must succeed.
+Hits on 1, 2, 3, 5, 6, or 7 → fix. Hits on 4 → confirm the long sleep is intentional + add a comment explaining why. Check 8 must succeed.
 
 ---
 
