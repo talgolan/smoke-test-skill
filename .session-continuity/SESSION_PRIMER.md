@@ -69,10 +69,10 @@ Edit source here. The "target project" in test fixtures lives under
 ## Test expectations — these must stay green
 
 ```
-bun test   # 27 pass / 0 fail
+bun test   # 35 pass / 0 fail
 ```
 
-8 of the 27 tests run `shellcheck` against shipped zsh files. They
+8 of the 35 tests run `shellcheck` against shipped zsh files. They
 require `shellcheck` on `$PATH` — without it they fail
 environmentally (Ubuntu: `sudo apt-get install shellcheck`; macOS:
 `brew install shellcheck`). If non-shellcheck tests regress,
@@ -96,15 +96,25 @@ No external services, no credentials, no costs.
 
 ## Current state
 
-- v0.1.0 published; README comprehensive; manual sandbox
-  integration test passed.
-- Active branch is `main`. PR #1 (duration-history spec) merged.
-  Two follow-up fixes landed for plugin marketplace install:
-  `source` schema and `author` schema. See LEARNINGS #1, #2.
-- Walk-up boundary UX gap (was outstanding #1) **resolved**: smoke-add
-  now accepts `--install-path <path>` AND falls back to
+- v0.2.0 in flight on `feat/duration-history`. README comprehensive;
+  manual sandbox integration test passed.
+- v0.1.0 shipped on `main` (commit `ddec1d0`). PR #1 (duration-history
+  spec) merged earlier. Two follow-up fixes landed for plugin
+  marketplace install: `source` schema and `author` schema. See
+  LEARNINGS #1, #2.
+- Walk-up boundary UX gap **resolved** in v0.1.0: smoke-add accepts
+  `--install-path <path>` AND falls back to
   `<git-root>/docs/superpowers/smoke-tests/.smokerc` when walk-up halts
-  at `.git`. 4 new tests cover the fallback + explicit-path cases.
+  at `.git`.
+- **Duration history + adaptive runs** implemented (spec
+  `2026-05-29-duration-history-design.md`). New
+  `payload/lib/history.zsh` (5 public fns: stats / poll / budget /
+  outlier / append / cap), wired into `payload/template/run.zsh`:
+  pre-run banner with p50/p95/poll/budget per section, drift WARN
+  when p95 ≥ budget (count ≥ 5), per-section history append +
+  cap-after-summary, outlier marker (`⚠ Nx median`) on PASS rows.
+  `<topic>/.history.jsonl` is committed by default. 8 new history
+  tests + runner-smoke assertion of banner.
 
 **Current `git log --oneline -5` (HEAD):**
 
