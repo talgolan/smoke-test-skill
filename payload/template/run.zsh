@@ -1,5 +1,5 @@
 #!/usr/bin/env zsh
-# Controller for a smoke-test runner.
+# {{TOPIC}} smoke runner — controller.
 #
 # Created by `/smoke-add <topic>` (or `/smoke-init` for the first
 # runner). Override ALL_SECTIONS and add steps under steps/.
