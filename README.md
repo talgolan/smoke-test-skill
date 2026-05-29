@@ -65,7 +65,7 @@ The grep gate at the bottom of the guide catches these mechanically before commi
 ### Two slash commands
 
 - **`/smoke-init`** — scaffolds the framework into a target project (default install path: `docs/superpowers/smoke-tests/`). Interactive prompts collect `SUT_BIN`, `SUT_REPO`, `BUILD_CMD`. Also creates the first runner.
-- **`/smoke-add <topic>`** — scaffolds an additional runner from the template, in an existing install.
+- **`/smoke-add <topic>`** — scaffolds an additional runner from the template, in an existing install. Walks up from `$PWD` looking for `.smokerc`; if the walk halts at `.git`, falls back to `<git-root>/docs/superpowers/smoke-tests/.smokerc`. Pass `--install-path <path> <topic>` to bypass discovery for non-default install dirs.
 
 ### What lands in the target project
 
@@ -247,10 +247,16 @@ Answer the prompts. The first runner is scaffolded immediately; run it:
 docs/superpowers/smoke-tests/<topic>/run.zsh
 ```
 
-Add more runners (run from inside the install dir so the walk-up resolves):
+Add more runners (default install path resolves from repo root via the `.git` fallback):
 
 ```
 /smoke-add <new-topic>
+```
+
+For non-default install paths, pass `--install-path <path>`:
+
+```
+/smoke-add --install-path <path> <new-topic>
 ```
 
 Author a new section: see the scaffolded `<install-path>/AUTHORING_GUIDE.md`.

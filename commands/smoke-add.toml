@@ -1,15 +1,26 @@
 description = "Scaffold a new smoke-test runner for <topic>"
 prompt = """
 Run the smoke-add scaffold script from the user's current working
-directory. The arg is the topic name (e.g. `auth`, `port-exposure`).
+directory. {{args}} is one of:
+  - <topic>                          (e.g. `auth`)
+  - --install-path <path> <topic>    (explicit install dir)
 
 Try, in order, until one works:
-  1. zsh ${CLAUDE_PLUGIN_ROOT}/scripts/smoke-add.zsh --topic {{args}}
-  2. zsh scripts/smoke-add.zsh --topic {{args}}
+  1. zsh ${CLAUDE_PLUGIN_ROOT}/scripts/smoke-add.zsh {{args_or_topic}}
+  2. zsh scripts/smoke-add.zsh {{args_or_topic}}
 
-The script walks up from $PWD until it finds .smokerc (boundary: .git
-dir or $HOME). Refuses if no .smokerc found, or if <topic> dir already
-exists.
+Where {{args_or_topic}} is:
+  - `--topic <topic>` if {{args}} is bare topic name
+  - `--install-path <path> --topic <topic>` if user passed an
+    explicit install path
+
+Discovery order when --install-path is omitted:
+  1. Walk up from $PWD looking for .smokerc (halts at .git or $HOME).
+  2. If walk-up halts at .git, probe
+     <git-root>/docs/superpowers/smoke-tests/.smokerc.
+  3. Otherwise refuse with hint to pass --install-path.
+
+Refuses if <topic> dir already exists.
 
 After running, summarize the file paths created.
 """

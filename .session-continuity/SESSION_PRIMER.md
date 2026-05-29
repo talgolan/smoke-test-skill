@@ -69,10 +69,10 @@ Edit source here. The "target project" in test fixtures lives under
 ## Test expectations — these must stay green
 
 ```
-bun test   # 23 pass / 0 fail
+bun test   # 27 pass / 0 fail
 ```
 
-8 of the 23 tests run `shellcheck` against shipped zsh files. They
+8 of the 27 tests run `shellcheck` against shipped zsh files. They
 require `shellcheck` on `$PATH` — without it they fail
 environmentally (Ubuntu: `sudo apt-get install shellcheck`; macOS:
 `brew install shellcheck`). If non-shellcheck tests regress,
@@ -97,19 +97,19 @@ No external services, no credentials, no costs.
 ## Current state
 
 - v0.1.0 published; README comprehensive; manual sandbox
-  integration test passed; one v0.2 follow-up flagged.
+  integration test passed.
 - Active branch is `main`. PR #1 (duration-history spec) merged.
   Two follow-up fixes landed for plugin marketplace install:
   `source` schema and `author` schema. See LEARNINGS #1, #2.
+- Walk-up boundary UX gap (was outstanding #1) **resolved**: smoke-add
+  now accepts `--install-path <path>` AND falls back to
+  `<git-root>/docs/superpowers/smoke-tests/.smokerc` when walk-up halts
+  at `.git`. 4 new tests cover the fallback + explicit-path cases.
 
 **Current `git log --oneline -5` (HEAD):**
 
 ```
-7dc789b fix(manifest): plugin.json author must be object, not string
-548a0ef feat(spec): duration history + adaptive smoke runs (#1)
-b04fe7b feat: GitHub-marketplace install + 30s liveness rule
-41f1321 docs: refresh primer log block
-b26211b docs: init session-continuity + fix README install commands
+{{HEAD_AFTER_COMMIT}}
 ```
 
 Regenerate this block whenever you commit — see "Primer maintenance"
@@ -117,14 +117,8 @@ below.
 
 ## Outstanding items (explicitly deferred — not bugs, decisions)
 
-1. **Walk-up boundary UX gap (v0.2).** `smoke-add --topic <name>` from
-   the repo root halts at `.git` before finding `.smokerc` (which
-   lives at `docs/superpowers/smoke-tests/.smokerc`). Workaround today:
-   `cd` into the install dir first. v0.2 fix candidates: try
-   `<repo-root>/docs/superpowers/smoke-tests/.smokerc` as fallback
-   default, OR accept an explicit `--install-path` argument that
-   bypasses walk-up. Not blocking v0.1.0. Surfaced in
-   `tests/manual-run-notes.md` line 14–16.
+_None at HEAD._ Previous outstanding #1 (walk-up boundary UX gap)
+resolved — see "Current state".
 
 ## Workflow conventions
 

@@ -3,12 +3,17 @@
 #
 # Usage:
 #   smoke-add.zsh --topic <name>
+#   smoke-add.zsh --install-path <path> --topic <name>
 #   smoke-add.zsh --install-path <path> --topic <name> --from-init
 #
-# When --from-init: install path is given (called by smoke-init.zsh
-# before .smokerc exists in target). Skip the walk-up.
-# Otherwise: walk up from $PWD until .smokerc found (boundary: .git or
-# $HOME), then use that dir as the install path.
+# Discovery order:
+#   1. If --install-path given: use it directly (relative to $PWD).
+#      With --from-init, skip the .smokerc-exists check (init creates
+#      it after this script returns).
+#   2. Otherwise walk up from $PWD until .smokerc found (boundary: .git
+#      or $HOME).
+#   3. If walk-up halts at .git, probe <git-root>/docs/superpowers/
+#      smoke-tests/.smokerc as a default-path fallback.
 
 set -u
 emulate -L zsh
@@ -31,24 +36,48 @@ done
 
 [[ -n "$topic" ]] || { print -u2 "ERROR: --topic required"; exit 2; }
 
+DEFAULT_INSTALL_REL="docs/superpowers/smoke-tests"
+
 if $from_init; then
+  [[ -n "$install_path" ]] || { print -u2 "ERROR: --install-path required with --from-init"; exit 2; }
   abs_install="$PWD/$install_path"
+elif [[ -n "$install_path" ]]; then
+  # Explicit --install-path: resolve relative to $PWD, require .smokerc.
+  case "$install_path" in
+    /*) abs_install="$install_path" ;;
+    *)  abs_install="$PWD/$install_path" ;;
+  esac
+  if [[ ! -f "$abs_install/.smokerc" ]]; then
+    print -u2 "ERROR: $abs_install/.smokerc not found; run /smoke-init --install-path $install_path first"
+    exit 2
+  fi
 else
   # Walk up from $PWD until .smokerc found, halting at .git or $HOME.
   d="$PWD"
   abs_install=""
+  halted_at=""
   while [[ -n "$d" && "$d" != "/" ]]; do
     if [[ -f "$d/.smokerc" ]]; then
       abs_install="$d"
       break
     fi
     if [[ -d "$d/.git" || "$d" == "$HOME" ]]; then
-      print -u2 "ERROR: no .smokerc found from $PWD upward (stopped at $d); run /smoke-init first"
-      exit 2
+      halted_at="$d"
+      break
     fi
     d="${d:h}"
   done
-  [[ -n "$abs_install" ]] || { print -u2 "ERROR: no .smokerc found from $PWD upward; run /smoke-init first"; exit 2; }
+  # Fallback: if halted at .git, probe <git-root>/<DEFAULT_INSTALL_REL>/.smokerc.
+  if [[ -z "$abs_install" && -n "$halted_at" && -d "$halted_at/.git" ]]; then
+    candidate="$halted_at/$DEFAULT_INSTALL_REL"
+    if [[ -f "$candidate/.smokerc" ]]; then
+      abs_install="$candidate"
+    fi
+  fi
+  if [[ -z "$abs_install" ]]; then
+    print -u2 "ERROR: no .smokerc found from $PWD upward${halted_at:+ (stopped at $halted_at)}; run /smoke-init first, or pass --install-path <path>"
+    exit 2
+  fi
 fi
 
 topic_dir="$abs_install/$topic"
