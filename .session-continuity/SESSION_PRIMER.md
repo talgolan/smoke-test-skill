@@ -98,17 +98,18 @@ No external services, no credentials, no costs.
 
 - v0.1.0 published; README comprehensive; manual sandbox
   integration test passed; one v0.2 follow-up flagged.
-- Active branch is `feat/duration-history`; latest commit is a spec
-  for duration-history & adaptive smoke runs (no code yet).
+- Active branch is `main`. PR #1 (duration-history spec) merged.
+  Two follow-up fixes landed for plugin marketplace install:
+  `source` schema and `author` schema. See LEARNINGS #1, #2.
 
 **Current `git log --oneline -5` (HEAD):**
 
 ```
-3e8da5e docs(spec): duration-history & adaptive smoke runs
+7dc789b fix(manifest): plugin.json author must be object, not string
+548a0ef feat(spec): duration history + adaptive smoke runs (#1)
 b04fe7b feat: GitHub-marketplace install + 30s liveness rule
 41f1321 docs: refresh primer log block
 b26211b docs: init session-continuity + fix README install commands
-b1cb052 docs(README): real GitHub URLs after public push
 ```
 
 Regenerate this block whenever you commit — see "Primer maintenance"
