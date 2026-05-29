@@ -226,6 +226,18 @@ Hits on 1, 2, 3, 5, 6, or 7 → fix. Hits on 4 → confirm the long sleep is int
 
 ## 10. When a smoke run fails
 
+### Operating a long run
+
+Smoke runs that pull images, download dependencies, or build the SUT can take minutes. While a run is in flight, **poll the structured log every 30 s** to confirm forward progress — silent ≠ healthy:
+
+```sh
+tail -n 50 <topic>/logs/run-<latest>.log
+```
+
+For sections that spawn the SUT in tmux, also tail the pane log: `<topic>/logs/<NN>-<slug>-pane.log`. If two consecutive 30 s polls show no new output AND the section's `BUDGET_SECONDS` hasn't fired, the run is hung — kill it (`pkill -f run.zsh`, plus `tmux kill-session -t <slug>` for any active term-a sessions) and investigate. The budget is an upper bound; it is not a health check, and waiting it out wastes minutes per stuck section.
+
+### After a failure
+
 In order of cost:
 
 1. **Read the structured `$RUN_LOG`.** Every `verify`, `run`, and `pass`/`fail` is timestamped and prefixed. Search for `FAIL` first, then read 20 lines of context above each.

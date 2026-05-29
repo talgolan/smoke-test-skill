@@ -181,7 +181,44 @@ If the runner walked all the way to `/`, it would happily pick up an unrelated p
 
 Repo: <https://github.com/talgolan/smoke-test-skill>.
 
-### Local install (recommended for development)
+### Install from GitHub (recommended)
+
+The repo ships a `.claude-plugin/marketplace.json` that registers itself as a single-plugin marketplace. In Claude Code:
+
+```
+/plugin marketplace add talgolan/smoke-test-skill
+/plugin install smoke-test-skill@talgolan
+```
+
+Slash commands `/smoke-init` and `/smoke-add` are then available.
+
+### Auto-update
+
+Third-party marketplaces default to **manual update**. Two ways to flip it on:
+
+1. **UI** — `/plugin` → Marketplaces → `talgolan` → Enable auto-update. Updates pull at Claude Code startup.
+2. **Settings** — add to `~/.claude/settings.json`:
+
+   ```json
+   {
+     "extraKnownMarketplaces": {
+       "talgolan": {
+         "source": { "source": "github", "repo": "talgolan/smoke-test-skill" },
+         "autoUpdate": true
+       }
+     }
+   }
+   ```
+
+Manual update any time:
+
+```
+/plugin marketplace update talgolan
+```
+
+The skill payload (files copied into target projects) is versioned independently of the skill itself. After a skill update, re-run `/smoke-init --force` in a target project to overwrite its `lib/` + `AUTHORING_GUIDE.md` with the new version (sibling backup is created automatically).
+
+### Local install (development)
 
 Clone and start Claude Code with `--plugin-dir`:
 
@@ -190,25 +227,9 @@ git clone https://github.com/talgolan/smoke-test-skill ~/active_development/smok
 claude --plugin-dir ~/active_development/smoke-test-skill
 ```
 
-The slash commands `/smoke-init` and `/smoke-add` should now be available. After editing files in the clone, run `/reload-plugins` inside Claude Code to pick up changes without restarting.
+After editing files in the clone, run `/reload-plugins` inside Claude Code to pick up changes without restarting.
 
 > Don't symlink into `~/.claude/plugins/cache/` — that directory is an internal cache managed by the plugin manager and gets clobbered.
-
-### Update
-
-```bash
-cd ~/active_development/smoke-test-skill && git pull
-```
-
-Then `/reload-plugins` (or restart Claude Code). The skill payload (the files copied into target projects) is versioned independently. Re-run `/smoke-init --force` in a target project to overwrite its `lib/` + `AUTHORING_GUIDE.md` with the new version (sibling backup is created automatically).
-
-### Marketplace install
-
-When the skill is published to a Claude Code plugin marketplace:
-
-```
-/plugin install smoke-test-skill@<marketplace-name>
-```
 
 ---
 

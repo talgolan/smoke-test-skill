@@ -47,6 +47,7 @@ Walks up from `$PWD` to find `.smokerc`, then scaffolds `<install-path>/<topic>/
 3. **Read `<install-path>/AUTHORING_GUIDE.md` before authoring step files.** Every rule there is real.
 4. **Run the AUTHORING_GUIDE grep gate** before committing step files.
 5. **Smoke tests are NOT a substitute for unit tests.** The project's `bun test` / `pytest` / `cargo test` continues unchanged. Smoke runs the *binary*, not functions.
+6. **Monitor long-running smoke runs every 30 s.** Smoke runs that pull images, download dependencies, or build can take minutes. When you launch one (`./run.zsh` or a single section that's known-slow), do not assume silent = healthy. Poll the run log every 30 s — `tail -n 50 <topic>/logs/run-<latest>.log`, or check tmux pane logs for `term_a_start`-spawned SUTs — to confirm forward progress (new lines, advancing section). If two consecutive 30 s polls show no new output AND the section's `BUDGET_SECONDS` hasn't fired yet, the run is hung; kill it (`pkill -f run.zsh` or `tmux kill-session -t <slug>`) and investigate rather than waiting out the budget. The budget is the upper bound, not the health check.
 
 ## File map after `/smoke-init`
 

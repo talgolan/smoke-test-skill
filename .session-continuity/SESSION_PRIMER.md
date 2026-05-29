@@ -104,11 +104,11 @@ No external services, no credentials, no costs.
 **Current `git log --oneline -5` (primary branch):**
 
 ```
+41f1321 docs: refresh primer log block
 b26211b docs: init session-continuity + fix README install commands
 b1cb052 docs(README): real GitHub URLs after public push
 906957e docs(guide): +4 generic learnings from itb (alias, PATH-filter, JSON-version, nc -z, renumber)
 1791a58 docs(README): comprehensive what/why/how/tradeoffs/non-goals
-7d29950 chore: v0.1.0 — README + version bump
 ```
 
 Regenerate this block whenever you commit — see "Primer maintenance"

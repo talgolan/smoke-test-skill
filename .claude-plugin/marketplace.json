@@ -1,0 +1,13 @@
+{
+  "name": "talgolan",
+  "owner": {
+    "name": "Tal Golan"
+  },
+  "plugins": [
+    {
+      "name": "smoke-test-skill",
+      "source": ".",
+      "description": "Scaffold an executable smoke-test framework into any project. Two slash commands: /smoke-init scaffolds the framework + first runner; /smoke-add scaffolds additional runners."
+    }
+  ]
+}
