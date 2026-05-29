@@ -46,6 +46,11 @@ SMOKE_LIB="$INSTALL_DIR/lib"
 # Source .smokerc BEFORE lib/ — lib/env.zsh validates the values it sets.
 source "$INSTALL_DIR/.smokerc"
 
+# Export config so per-section sub-shells inherit it.
+export SUT_BIN SUT_REPO BUILD_CMD SMOKE_ROOT
+[[ -n "${BUDGET_DEFAULT:-}" ]] && export BUDGET_DEFAULT
+[[ -n "${RUN_LOG_KEEP:-}" ]] && export RUN_LOG_KEEP
+
 mkdir -p logs
 
 LOG_KEEP="${RUN_LOG_KEEP:-3}"
