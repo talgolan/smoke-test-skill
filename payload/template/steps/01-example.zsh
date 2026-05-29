@@ -18,7 +18,12 @@ sect "{{TOPIC}} §${SECTION_NUM}: example"
 
 # --- Setup ---
 mkdir -p "$pdir"
-[[ -d "$pdir" ]] && pass "setup: pdir exists" || { fail "setup: pdir missing"; exit 1; }
+if [[ -d "$pdir" ]]; then
+  pass "setup: pdir exists"
+else
+  fail "setup: pdir missing"
+  exit 1
+fi
 
 # --- Steps ---
 verify "binary executable" "test -x \"\$SUT_BIN\""

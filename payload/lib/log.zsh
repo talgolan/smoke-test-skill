@@ -2,15 +2,15 @@
 # Log helpers: tee everything to RUN_LOG + stdout, with timestamps.
 # RUN_LOG must be exported by run.zsh before sourcing.
 
-: ${RUN_LOG:?RUN_LOG must be set}
+: "${RUN_LOG:?RUN_LOG must be set}"
 
-_ts() { date +'%Y-%m-%dT%H:%M:%S%z' }
+_ts() { date +'%Y-%m-%dT%H:%M:%S%z'; }
 
-log()   { print -r -- "[$(_ts)] $*" | tee -a "$RUN_LOG" }
-info()  { log "INFO  $*" }
-warn()  { log "WARN  $*" }
-err()   { log "ERROR $*" }
-sect()  { log ""; log "=== $* ==="; log "" }
+log()   { print -r -- "[$(_ts)] $*" | tee -a "$RUN_LOG"; }
+info()  { log "INFO  $*"; }
+warn()  { log "WARN  $*"; }
+err()   { log "ERROR $*"; }
+sect()  { log ""; log "=== $* ==="; log ""; }
 
 # pass/fail counters for the run summary
 typeset -gi PASS_COUNT=0 FAIL_COUNT=0 SKIP_COUNT=0

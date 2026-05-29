@@ -3,7 +3,7 @@
 # Used for steps that genuinely cannot be scripted (VS Code Remote-SSH §12,
 # any optional human-eyeball verifications).
 
-: ${RUN_LOG:?RUN_LOG must be set}
+: "${RUN_LOG:?RUN_LOG must be set}"
 
 # pause "<headline>" "<multi-line-instructions>"
 pause() {

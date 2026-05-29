@@ -18,7 +18,7 @@
 #                                per-runner if your container naming
 #                                differs.
 
-: ${RUN_LOG:?RUN_LOG must be set}
+: "${RUN_LOG:?RUN_LOG must be set}"
 
 # term_a_start "<slug>" "<command>" [arg ...]
 # Starts a detached tmux session running the given command. The command

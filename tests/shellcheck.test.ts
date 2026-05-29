@@ -1,0 +1,35 @@
+import { test, expect } from "bun:test";
+import { spawnSync } from "node:child_process";
+import { join } from "node:path";
+
+const SKILL_ROOT = join(import.meta.dir, "..");
+
+const FILES = [
+  "payload/lib/env.zsh",
+  "payload/lib/log.zsh",
+  "payload/lib/pause.zsh",
+  "payload/lib/term-a.zsh",
+  "payload/template/run.zsh",
+  "payload/template/steps/01-example.zsh",
+  "scripts/smoke-init.zsh",
+  "scripts/smoke-add.zsh",
+];
+
+for (const f of FILES) {
+  test(`shellcheck: ${f}`, () => {
+    // shellcheck for zsh files: pass --shell=bash (closest dialect supported).
+    // Disabled checks:
+    //   SC2154 (var ref'd but not assigned) — common across sourced files
+    //   SC1090/SC1091 (can't follow source) — sourced files at runtime, not parseable
+    //   SC2034 (unused) — typeset -ga arrays look "unused" until run.zsh iterates
+    const res = spawnSync(
+      "shellcheck",
+      ["--shell=bash", "-e", "SC2154,SC1090,SC1091,SC2034", join(SKILL_ROOT, f)],
+      { encoding: "utf8" }
+    );
+    if (res.status !== 0) {
+      console.log(`shellcheck output for ${f}:\n${res.stdout}`);
+    }
+    expect(res.status).toBe(0);
+  });
+}

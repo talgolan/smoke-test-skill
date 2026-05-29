@@ -21,7 +21,7 @@ set -u
 emulate -L zsh
 
 SCRIPT_DIR="${0:A:h}"
-cd "$SCRIPT_DIR"
+cd "$SCRIPT_DIR" || exit 2
 
 # Resolve install path by walking up from $SCRIPT_DIR until we find
 # `.smokerc`. Halt at the first `.git` dir (repo boundary) or at $HOME.
@@ -108,8 +108,9 @@ fi
 typeset -a SECTIONS_TO_RUN
 if (( $# > 0 )); then
   for arg in "$@"; do
-    local match=""
+    match=""
     for s in "${ALL_SECTIONS[@]}"; do
+      # shellcheck disable=SC2296  # zsh padding expansion
       if [[ "$s" == "$arg"* ]] || [[ "$s" == ${(l:2::0:)arg}-* ]]; then
         match="$s"; break
       fi
@@ -145,7 +146,7 @@ for tool in "${tools[@]}"; do
     fail "preflight: $tool missing"; preflight_ok=false
   fi
 done
-$preflight_ok || { err "preflight failed; aborting"; exit 2 }
+$preflight_ok || { err "preflight failed; aborting"; exit 2; }
 log "preflight OK"
 
 # Optional pre_run hook
