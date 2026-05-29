@@ -178,6 +178,14 @@ real change that made them necessary.
 record the previous primer refresh. Treat primer-only commits as a
 one-shot catch-up, not a habit.
 
+**Never stage `{{...}}` placeholders.** The log block can't include
+the SHA of the commit shipping it (chicken-and-egg). Default: snapshot
+the current `git log` pre-commit and accept that the primer is current
+as of HEAD~1 once the commit lands. The next substantive primer
+refresh catches up. Run
+`grep -n '{{' .session-continuity/SESSION_PRIMER.md` before `git add`
+— must return nothing. See LEARNINGS #3.
+
 When a bug takes more than 15 minutes to diagnose, update
 `.session-continuity/LEARNINGS.md` too (see that file's footer for
 numbering rules).

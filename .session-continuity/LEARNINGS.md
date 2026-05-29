@@ -26,6 +26,36 @@ generation.
 
 ---
 
+## Primer maintenance
+
+### #3 — Primer log block can't include the SHA of the commit shipping it (2026-05-29)
+
+**Symptom.** Refreshed `git log --oneline -5` block in primer → staged
++ committed → primer commit's own SHA is now HEAD, but the log block
+inside still shows the *previous* HEAD. Trying to write the new SHA
+before committing means putting a placeholder (`{{HEAD_AFTER_COMMIT}}`)
+that, in this session, accidentally shipped to disk.
+
+**Why.** The log block is a snapshot of `git log` at the moment of
+authoring. The commit that lands the snapshot is, by definition, not
+yet in `git log` at authoring time. There's a chicken-and-egg loop.
+
+**Fix.** Don't try to pre-compute the new SHA. Two options:
+
+1. **Snapshot pre-commit, accept one-commit lag** (default). Stage the
+   primer with the previous HEAD's log block. The primer is then
+   "current as of HEAD~1" — close enough; refresh on the next
+   substantive commit catches up.
+2. **Catch-up commit immediately after** (rare). Commit the real
+   change, then a `docs(primer): refresh log block` follow-up. Worth
+   it only if the gap matters; otherwise option 1 is cleaner.
+
+**Hard rule:** never stage a primer with `{{...}}` placeholders. Run
+`grep -n '{{' .session-continuity/SESSION_PRIMER.md` before
+`git add` — must return nothing.
+
+---
+
 ## Scaffolder logic (smoke-init / smoke-add)
 
 <!-- TBD — walk-up boundary, token substitution, --force backup behavior. -->
