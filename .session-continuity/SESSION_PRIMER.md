@@ -109,7 +109,11 @@ No external services, no credentials, no costs.
 **Current `git log --oneline -5` (HEAD):**
 
 ```
-{{HEAD_AFTER_COMMIT}}
+68ddb68 feat(smoke-add): explicit --install-path + .git fallback discovery
+f4f9d7f docs(primer): catch-up — main now at 7dc789b after marketplace fixes
+7dc789b fix(manifest): plugin.json author must be object, not string
+548a0ef feat(spec): duration history + adaptive smoke runs (#1)
+b04fe7b feat: GitHub-marketplace install + 30s liveness rule
 ```
 
 Regenerate this block whenever you commit — see "Primer maintenance"
