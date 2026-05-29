@@ -96,12 +96,12 @@ No external services, no credentials, no costs.
 
 ## Current state
 
-- v0.2.0 in flight on `feat/duration-history`. README comprehensive;
-  manual sandbox integration test passed.
-- v0.1.0 shipped on `main` (commit `ddec1d0`). PR #1 (duration-history
-  spec) merged earlier. Two follow-up fixes landed for plugin
-  marketplace install: `source` schema and `author` schema. See
-  LEARNINGS #1, #2.
+- v0.2.0 shipped on `main` (commit `29e2eb7`, PR #2 squash-merged).
+  README comprehensive; manual sandbox integration test passed.
+- v0.1.0 shipped earlier on `main` (commit `ddec1d0`). PR #1
+  (duration-history spec) merged. Two follow-up fixes landed for
+  plugin marketplace install: `source` schema and `author` schema.
+  See LEARNINGS #1, #2.
 - Walk-up boundary UX gap **resolved** in v0.1.0: smoke-add accepts
   `--install-path <path>` AND falls back to
   `<git-root>/docs/superpowers/smoke-tests/.smokerc` when walk-up halts
@@ -119,11 +119,11 @@ No external services, no credentials, no costs.
 **Current `git log --oneline -5` (HEAD):**
 
 ```
+29e2eb7 feat: duration history + adaptive smoke runs (v0.2.0) (#2)
+ddec1d0 docs(learnings): #3 — primer log block can't include shipping commit SHA
+538cd7f docs(primer): fill in HEAD log block placeholder
 68ddb68 feat(smoke-add): explicit --install-path + .git fallback discovery
 f4f9d7f docs(primer): catch-up — main now at 7dc789b after marketplace fixes
-7dc789b fix(manifest): plugin.json author must be object, not string
-548a0ef feat(spec): duration history + adaptive smoke runs (#1)
-b04fe7b feat: GitHub-marketplace install + 30s liveness rule
 ```
 
 Regenerate this block whenever you commit — see "Primer maintenance"

@@ -58,7 +58,47 @@ yet in `git log` at authoring time. There's a chicken-and-egg loop.
 
 ## Scaffolder logic (smoke-init / smoke-add)
 
-<!-- TBD — walk-up boundary, token substitution, --force backup behavior. -->
+### #1 — Adding a new `payload/lib/*.zsh` file requires updating `scripts/smoke-init.zsh`'s explicit `cp` list (2026-05-29)
+
+**The trap.** `scripts/smoke-init.zsh` enumerates `payload/lib/`
+files by name (`cp "$PAYLOAD/lib/env.zsh" ...`, `cp ".../log.zsh"
+...`, etc.) instead of `cp -R "$PAYLOAD/lib/" ...` or a glob. New lib
+files added to `payload/lib/` are NOT copied into target installs
+unless the cp list is updated alongside. Caught this session when
+`history.zsh` (newly added in v0.2.0) failed to land in scaffolded
+projects — runner started, sourced the missing path, every
+`history_*` call became `command not found`, banner showed empty
+`p50=s p95=s` columns.
+
+**Symptom.** Scaffolded runner emits to stderr:
+
+```
+.../lib/history.zsh:source:80: no such file or directory: .../lib/history.zsh
+.../run.zsh:159: command not found: history_stats
+.../run.zsh:178: command not found: history_recommend_poll
+```
+
+Run still completes (history layer soft-fails) but banner output is
+broken.
+
+**Fix.** Add `cp "$PAYLOAD/lib/<new-file>.zsh" "$abs_install/lib/"`
+to `scripts/smoke-init.zsh` whenever a new `payload/lib/*.zsh` ships.
+Tests catch it: `tests/runner-smoke.test.ts` runs the scaffolder and
+the banner assertion fires the moment the file is missing.
+
+**Diagnostic signal.** A `command not found` for a function that's
+defined in `payload/lib/` and a missing `lib/<x>.zsh` in the test's
+target tmpdir together = `smoke-init.zsh` cp list is incomplete.
+Also surfaces in `tests/shellcheck.test.ts` indirectly: shellcheck
+runs against `payload/lib/<x>.zsh` (passes) but the runtime
+integration test still fails because the file never reaches the
+target.
+
+**Prevention candidate** (deferred): switch to `cp -R
+"$PAYLOAD/lib/" "$abs_install/lib/"` so additions auto-propagate.
+Risk: would also propagate stray scratch files inside `payload/lib/`,
+so guard with a known-files allowlist or a `.scaffold-include` glob.
+Not blocking; one-line cp adds are cheap.
 
 ---
 
