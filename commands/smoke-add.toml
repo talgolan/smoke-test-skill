@@ -1,0 +1,15 @@
+description = "Scaffold a new smoke-test runner for <topic>"
+prompt = """
+Run the smoke-add scaffold script from the user's current working
+directory. The arg is the topic name (e.g. `auth`, `port-exposure`).
+
+Try, in order, until one works:
+  1. zsh ${CLAUDE_PLUGIN_ROOT}/scripts/smoke-add.zsh --topic {{args}}
+  2. zsh scripts/smoke-add.zsh --topic {{args}}
+
+The script walks up from $PWD until it finds .smokerc (boundary: .git
+dir or $HOME). Refuses if no .smokerc found, or if <topic> dir already
+exists.
+
+After running, summarize the file paths created.
+"""

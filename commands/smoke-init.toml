@@ -1,0 +1,18 @@
+description = "Scaffold the smoke-test framework into the current project"
+prompt = """
+Run the smoke-init scaffold script with the user's arguments verbatim, from the user's current working directory.
+
+Try, in order, until one works:
+  1. zsh ${CLAUDE_PLUGIN_ROOT}/scripts/smoke-init.zsh {{args}}
+  2. zsh scripts/smoke-init.zsh {{args}}   (if the plugin root is the cwd)
+
+The script accepts: --install-path <path>, --topic <name>, --force,
+--non-interactive, --sut-bin <p>, --sut-repo <p>, --build-cmd <cmd>,
+--preflight "<tools>".
+
+If --topic is missing and we're not in --non-interactive mode, the
+script prompts on /dev/tty.
+
+After running, summarize what was scaffolded and remind the user to
+git-add the install path.
+"""
