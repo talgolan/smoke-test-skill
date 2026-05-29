@@ -34,6 +34,38 @@ generation.
 
 ## Plugin marketplace publishing
 
+### #2 — `plugin.json` `author` must be object, not string (2026-05-29)
+
+**Symptom.** `/plugin install` after schema + SSH fixes:
+
+```
+Plugin ... has an invalid manifest file at .../.claude-plugin/plugin.json.
+Validation errors: author: Invalid input: expected object, received string
+```
+
+**Cause.** `plugin.json` had `"author": "Tal Golan"`. Schema requires
+an object with at least `name`.
+
+**Fix.**
+
+```json
+"author": {
+  "name": "Tal Golan"
+}
+```
+
+`email` optional. Same shape as `marketplace.json` `owner`.
+
+**Stacking trap.** Three independent failures masked each other:
+1. `"source": "."` → "version not supported"
+2. SSH host key → "Host key verification failed"
+3. `"author": "string"` → "invalid manifest"
+
+Only surfaced sequentially. Validate manifest schema locally before
+publishing — no upstream linter today.
+
+---
+
 ### #1 — `"source": "."` rejected as unsupported source type (2026-05-29)
 
 **Symptom.** `/plugin install smoke-test-skill@talgolan` failed in
@@ -100,7 +132,7 @@ public-facing version of this. -->
 
 ---
 
-*Last entry: 2026-05-29 (#1 — plugin marketplace `source: "."` rejected). Add
+*Last entry: 2026-05-29 (#2 — plugin.json `author` must be object). Add
 new entries at the top of each section as they surface. The
 `/session-continuity:learning` command bumps this line automatically.
 Rule of thumb: if a bug takes more than 15 minutes to diagnose, it
