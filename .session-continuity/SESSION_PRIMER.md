@@ -96,19 +96,19 @@ No external services, no credentials, no costs.
 
 ## Current state
 
-- v0.1.0 published; README is comprehensive; manual sandbox
+- v0.1.0 published; README comprehensive; manual sandbox
   integration test passed; one v0.2 follow-up flagged.
-- Active branch is `main`; recent commits are docs polish (real
-  GitHub URLs, +4 generic learnings, comprehensive README).
+- Active branch is `feat/duration-history`; latest commit is a spec
+  for duration-history & adaptive smoke runs (no code yet).
 
-**Current `git log --oneline -5` (primary branch):**
+**Current `git log --oneline -5` (HEAD):**
 
 ```
+3e8da5e docs(spec): duration-history & adaptive smoke runs
+b04fe7b feat: GitHub-marketplace install + 30s liveness rule
 41f1321 docs: refresh primer log block
 b26211b docs: init session-continuity + fix README install commands
 b1cb052 docs(README): real GitHub URLs after public push
-906957e docs(guide): +4 generic learnings from itb (alias, PATH-filter, JSON-version, nc -z, renumber)
-1791a58 docs(README): comprehensive what/why/how/tradeoffs/non-goals
 ```
 
 Regenerate this block whenever you commit — see "Primer maintenance"

@@ -32,6 +32,50 @@ generation.
 
 ---
 
+## Plugin marketplace publishing
+
+### #1 — `"source": "."` rejected as unsupported source type (2026-05-29)
+
+**Symptom.** `/plugin install smoke-test-skill@talgolan` failed in
+Claude Code v2.1.157 with:
+
+```
+Failed to install: This plugin uses a source type your Claude Code
+version does not support. Update Claude Code and try again.
+```
+
+**Misleading message.** Error blames Claude Code version. Real cause
+is the `marketplace.json` schema.
+
+**Cause.** `marketplace.json` declared `"source": "."` for a plugin
+living at the marketplace repo root. Per docs, relative-path sources
+**must start with `./`**. Bare `.` is not in the supported set
+(`./...` | `github` | `url` | `git-subdir` | `npm`), so the installer
+classifies it as an unknown/future source type and emits the
+version-mismatch error instead of a schema error.
+
+**Fix.** When the plugin lives in the same repo as `marketplace.json`,
+prefer an explicit `github` object — works regardless of how the
+marketplace was added (clone, URL, ref pin) and avoids the
+"plugin-at-repo-root" relative-path edge case entirely:
+
+```json
+"source": {
+  "source": "github",
+  "repo": "owner/repo"
+}
+```
+
+If you need a relative path (multi-plugin marketplace, plugin in a
+subdir), use `"./plugins/foo"` — leading `./` is required.
+
+**How to spot it next time.** "Source type your Claude Code version
+does not support" with a recent CC version → suspect malformed
+`source` field before suspecting CC. Compare against the table at
+https://code.claude.com/docs/en/plugin-marketplaces#plugin-sources.
+
+---
+
 ## Security incidents
 
 <!-- None recorded. -->
@@ -56,7 +100,7 @@ public-facing version of this. -->
 
 ---
 
-*Last entry: 2026-05-29 (#0 — file initialized, no entries yet). Add
+*Last entry: 2026-05-29 (#1 — plugin marketplace `source: "."` rejected). Add
 new entries at the top of each section as they surface. The
 `/session-continuity:learning` command bumps this line automatically.
 Rule of thumb: if a bug takes more than 15 minutes to diagnose, it
