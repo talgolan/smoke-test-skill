@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { mkdtempSync, rmSync, mkdirSync, chmodSync, copyFileSync } from "node:fs";
+import { mkdtempSync, rmSync, mkdirSync, chmodSync, copyFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -39,6 +39,9 @@ test("scaffolded runner against fake SUT runs 01-example to PASS", () => {
     }
     expect(runRes.status).toBe(0);
     expect(runRes.stdout).toMatch(/01-example\s+PASS/);
+    expect(runRes.stdout).toMatch(/Expected durations \(from \.history\.jsonl\)/);
+    // First run on a fresh project: history file created by the runner.
+    expect(existsSync(join(work, "smoke", "demo", ".history.jsonl"))).toBe(true);
   } finally {
     rmSync(work, { recursive: true, force: true });
   }

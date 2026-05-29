@@ -72,6 +72,7 @@ cp "$PAYLOAD/lib/env.zsh"     "$abs_install/lib/"
 cp "$PAYLOAD/lib/log.zsh"     "$abs_install/lib/"
 cp "$PAYLOAD/lib/term-a.zsh"  "$abs_install/lib/"
 cp "$PAYLOAD/lib/pause.zsh"   "$abs_install/lib/"
+cp "$PAYLOAD/lib/history.zsh" "$abs_install/lib/"
 cp "$PAYLOAD/lib/README.md"   "$abs_install/lib/"
 cp "$PAYLOAD/AUTHORING_GUIDE.md" "$abs_install/"
 

@@ -151,6 +151,12 @@ When NOT to override:
 - A genuinely slow check — split into multiple smaller sections instead. Smaller sections are easier to debug.
 - "It sometimes runs slow on my laptop" — fix the flake or add an explicit `wait_for_port`/poll, don't paper over with a bigger budget.
 
+### Budget vs history
+
+Once a section has 5+ PASS entries in `.history.jsonl`, set `# BUDGET_SECONDS` to roughly `1.5 × p95(history)`. `run.zsh`'s pre-run banner prints both numbers; its drift warning fires when `p95 ≥ budget`. Avoid the temptation to set the budget to `p95 + 10s` — sections occasionally take 2× median for legitimate reasons (cold cache, slow CI runner), and a tight budget produces flaky TIMEOUTs without surfacing real bugs.
+
+`.history.jsonl` is committed by default — diff-per-run is one appended line per section, capped to 50 PASS + 10 non-PASS rows per section after each run. Authors who do not want history in repo can `.gitignore` `<topic>/.history.jsonl` per-runner.
+
 ---
 
 ## 7. Self-contained step files
@@ -228,13 +234,13 @@ Hits on 1, 2, 3, 5, 6, or 7 → fix. Hits on 4 → confirm the long sleep is int
 
 ### Operating a long run
 
-Smoke runs that pull images, download dependencies, or build the SUT can take minutes. While a run is in flight, **poll the structured log every 30 s** to confirm forward progress — silent ≠ healthy:
+While a run is in flight, poll the structured log at the **per-section interval printed in `run.zsh`'s pre-run banner**. The banner shows `poll every Ns` for each section, computed from `ceil(p95/4)` clamped to [15, 120] seconds. Sections without history poll at 15 s.
 
 ```sh
 tail -n 50 <topic>/logs/run-<latest>.log
 ```
 
-For sections that spawn the SUT in tmux, also tail the pane log: `<topic>/logs/<NN>-<slug>-pane.log`. If two consecutive 30 s polls show no new output AND the section's `BUDGET_SECONDS` hasn't fired, the run is hung — kill it (`pkill -f run.zsh`, plus `tmux kill-session -t <slug>` for any active term-a sessions) and investigate. The budget is an upper bound; it is not a health check, and waiting it out wastes minutes per stuck section.
+For sections that spawn the SUT in tmux, also tail the pane log: `<topic>/logs/<NN>-<slug>-pane.log`. If a tail at `p95 + 30s` shows no progress and the section's p50 is well under that, kill the run (`pkill -f run.zsh`, plus `tmux kill-session -t <slug>` for any active term-a sessions) rather than waiting out `BUDGET_SECONDS`. The budget is an upper bound, not a health check.
 
 ### After a failure
 

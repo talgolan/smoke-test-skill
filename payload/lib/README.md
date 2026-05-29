@@ -10,6 +10,7 @@ Reusable zsh helpers sourced by every runner's `run.zsh`.
 | `log.zsh`    | `log` / `info` / `warn` / `err` / `sect` plus `pass` / `fail` / `skip` / `verify` / `run` helpers. Tees everything to `$RUN_LOG` and stdout. |
 | `term-a.zsh` | tmux detached-session spawn / pane-grep / capture / close. Use for any step that needs a real TTY (`docker run -it`, anything that calls `stty`). |
 | `pause.zsh`  | `pause "<headline>" "<body>"` for operator-action steps; `confirm "<question>"` y/n prompt. Both read from `/dev/tty`. |
+| `history.zsh` | Per-section duration history + adaptive recommendations. Public functions: `history_stats <file> <section>`, `history_recommend_poll <p95>`, `history_recommend_budget <p95>`, `history_is_outlier <duration> <p50>`, `history_append <file> <section> <duration> <result> <budget>`, `history_cap <file>`. Soft-fails on every disk error — never breaks a run. |
 
 ## How a runner sources these
 
@@ -19,6 +20,7 @@ source "$SMOKE_LIB/log.zsh"
 source "$SMOKE_LIB/env.zsh"
 source "$SMOKE_LIB/term-a.zsh"
 source "$SMOKE_LIB/pause.zsh"
+source "$SMOKE_LIB/history.zsh"
 ```
 
 `$SMOKE_LIB` is resolved by `run.zsh` walking up from `${0:A:h}` until it finds the install dir's `.smokerc`, then descending into `lib/`.
@@ -41,7 +43,11 @@ Every command that goes through `verify` / `run` / `log` lands in `$RUN_LOG` (`l
 
 `term-a.zsh` additionally pipes the tmux pane to `logs/<NN>-<slug>-pane.log` so spawned process output survives even if the tmux session dies in <1 s.
 
-Per-section duration is reported in the summary table at the end of every run.
+Per-section duration is reported in the summary table at the end of every run, alongside an outlier marker (`⚠ Nx median`) when the run exceeds 2× the historical p50.
+
+## Duration history
+
+`run.zsh` writes one JSON line per (section, run) to `<topic>/.history.jsonl`. Capped to last 50 PASS + last 10 non-PASS rows per section; the file is committed by default. The pre-run banner reports `p50`, `p95`, current `budget`, and a recommended poll interval per section. A drift warning fires when `p95 ≥ budget` (suppressed below 5 PASS rows). All history operations soft-fail — a broken history layer is informative-only, never a gate.
 
 ## Why tmux instead of `pbpaste|bash` or `osascript`
 

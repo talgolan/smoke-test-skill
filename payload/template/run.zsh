@@ -77,6 +77,9 @@ source "$SMOKE_LIB/log.zsh"
 source "$SMOKE_LIB/env.zsh"
 source "$SMOKE_LIB/term-a.zsh"
 source "$SMOKE_LIB/pause.zsh"
+source "$SMOKE_LIB/history.zsh"
+
+HISTORY_FILE="$SCRIPT_DIR/.history.jsonl"
 
 # Sections, in declared order. Add a step by adding `steps/NN-*.zsh`
 # and appending it here.
@@ -136,6 +139,62 @@ log "  install dir: $INSTALL_DIR"
 log "  sections:    ${SECTIONS_TO_RUN[*]}"
 log "  date:        $(date)"
 
+# Compute per-section budgets up front so the banner can show them.
+DEFAULT_BUDGET="${BUDGET_DEFAULT:-30}"
+typeset -A SECTION_BUDGET
+for section in "${SECTIONS_TO_RUN[@]}"; do
+  step_file="$SCRIPT_DIR/steps/${section}.zsh"
+  declared_budget=""
+  if [[ -f "$step_file" ]]; then
+    declared_budget=$(grep -oE '^# BUDGET_SECONDS=[0-9]+' "$step_file" | head -1 \
+                      | grep -oE '[0-9]+')
+  fi
+  SECTION_BUDGET[$section]="${BUDGET_SECONDS:-${declared_budget:-$DEFAULT_BUDGET}}"
+done
+
+sect "Expected durations (from .history.jsonl)"
+typeset -A SECTION_P50 SECTION_P95 SECTION_COUNT
+typeset -a DRIFT_WARNINGS
+for section in "${SECTIONS_TO_RUN[@]}"; do
+  stats_line=$(history_stats "$HISTORY_FILE" "$section")
+  budget="${SECTION_BUDGET[$section]}"
+  p50="" p95="" count=0
+  if [[ "$stats_line" == count=0 ]]; then
+    poll=$(history_recommend_poll 0)
+    printf "  %-24s %-30s budget=%-5s poll every %ss\n" \
+      "$section" "(no history)" "${budget}s" "$poll" | tee -a "$RUN_LOG"
+    SECTION_COUNT[$section]=0
+  else
+    # Parse "p50=N p95=N max=N count=N"
+    # shellcheck disable=SC2206  # ${=var} is zsh's intentional word-split
+    typeset -a stats_tokens=( ${=stats_line} )
+    for tok in "${stats_tokens[@]}"; do
+      case "$tok" in
+        p50=*) p50="${tok#p50=}" ;;
+        p95=*) p95="${tok#p95=}" ;;
+        count=*) count="${tok#count=}" ;;
+      esac
+    done
+    poll=$(history_recommend_poll "${p95:-0}")
+    printf "  %-24s p50=%-4s p95=%-4s max=    budget=%-5s poll every %ss\n" \
+      "$section" "${p50}s" "${p95}s" "${budget}s" "$poll" | tee -a "$RUN_LOG"
+    SECTION_P50[$section]="$p50"
+    SECTION_P95[$section]="$p95"
+    SECTION_COUNT[$section]="$count"
+    # Drift warning: p95 >= budget AND count >= 5
+    if (( count >= 5 && p95 >= budget )); then
+      rec=$(history_recommend_budget "$p95")
+      DRIFT_WARNINGS+=("WARN: section $section p95=${p95}s ≥ current budget=${budget}s.\n      Consider raising: # BUDGET_SECONDS=${rec}  (1.5 × p95)")
+    fi
+  fi
+done
+if (( ${#DRIFT_WARNINGS} > 0 )); then
+  log ""
+  for w in "${DRIFT_WARNINGS[@]}"; do
+    print -- "$w" | tee -a "$RUN_LOG"
+  done
+fi
+
 sect "Preflight"
 preflight_ok=true
 typeset -a tools=("${PREFLIGHT_TOOLS[@]:-jq lsof tmux}")
@@ -160,8 +219,6 @@ if typeset -f pre_run >/dev/null; then
   fi
 fi
 
-DEFAULT_BUDGET="${BUDGET_DEFAULT:-30}"
-
 typeset -A SECTION_RESULT SECTION_DURATION
 for section in "${SECTIONS_TO_RUN[@]}"; do
   step_file="$SCRIPT_DIR/steps/${section}.zsh"
@@ -169,12 +226,12 @@ for section in "${SECTIONS_TO_RUN[@]}"; do
     sect "$section"
     fail "$section: step file missing ($step_file)"
     SECTION_RESULT[$section]="FAIL-missing"
+    SECTION_DURATION[$section]=0
+    history_append "$HISTORY_FILE" "$section" 0 "FAIL-missing" "${SECTION_BUDGET[$section]:-$DEFAULT_BUDGET}"
     continue
   fi
 
-  declared_budget=$(grep -oE '^# BUDGET_SECONDS=[0-9]+' "$step_file" | head -1 \
-                    | grep -oE '[0-9]+')
-  budget="${BUDGET_SECONDS:-${declared_budget:-$DEFAULT_BUDGET}}"
+  budget="${SECTION_BUDGET[$section]}"
 
   sect "$section  (budget: ${budget}s)"
   start_ts=$(date +%s)
@@ -197,12 +254,15 @@ for section in "${SECTIONS_TO_RUN[@]}"; do
   if (( rc == 142 || rc == 14 )); then
     SECTION_RESULT[$section]="TIMEOUT (>${budget}s)"
     log "  ${section}: TIMEOUT after ${duration}s (budget ${budget}s)"
+    history_append "$HISTORY_FILE" "$section" "$duration" "TIMEOUT" "$budget"
   elif (( rc == 0 )); then
     SECTION_RESULT[$section]="PASS"
     log "  ${section}: PASS in ${duration}s"
+    history_append "$HISTORY_FILE" "$section" "$duration" "PASS" "$budget"
   else
     SECTION_RESULT[$section]="FAIL (rc=$rc)"
     log "  ${section}: FAIL in ${duration}s (rc=$rc)"
+    history_append "$HISTORY_FILE" "$section" "$duration" "FAIL" "$budget"
   fi
 done
 
@@ -211,13 +271,26 @@ total_duration=0
 for s in "${SECTIONS_TO_RUN[@]}"; do
   d="${SECTION_DURATION[$s]:-0}"
   total_duration=$((total_duration + d))
-  printf "  %-30s %-22s %4ds\n" "$s" "${SECTION_RESULT[$s]:-(no result)}" "$d" \
+  result_str="${SECTION_RESULT[$s]:-(no result)}"
+  marker=""
+  # Outlier marker only on PASS rows with usable history.
+  if [[ "$result_str" == "PASS" ]]; then
+    p50="${SECTION_P50[$s]:-0}"
+    if (( p50 > 0 )) && history_is_outlier "$d" "$p50"; then
+      mult=$(awk -v d="$d" -v p="$p50" 'BEGIN { printf "%.1f", d / p }')
+      marker=" ⚠ ${mult}x median (historical p50=${p50}s)"
+    fi
+  fi
+  printf "  %-30s %-22s %4ds%s\n" "$s" "$result_str" "$d" "$marker" \
     | tee -a "$RUN_LOG"
 done
 log ""
 log "  total: ${total_duration}s"
 log ""
 log "  log: $RUN_LOG"
+
+# Cap history to per-section limits (50 PASS + 10 non-PASS).
+history_cap "$HISTORY_FILE"
 
 # Optional post_run hook (warn-only on failure; doesn't change exit code)
 if typeset -f post_run >/dev/null; then
