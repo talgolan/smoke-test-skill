@@ -87,10 +87,18 @@ topic_dir="$abs_install/$topic"
   exit 2
 }
 
-mkdir -p "$topic_dir/steps" "$topic_dir/logs"
+mkdir -p "$topic_dir/steps" "$topic_dir/logs" "$topic_dir/lib"
 cp "$PAYLOAD/template/run.zsh"              "$topic_dir/run.zsh"
 cp "$PAYLOAD/template/README.md"            "$topic_dir/README.md"
 cp "$PAYLOAD/template/steps/01-example.zsh" "$topic_dir/steps/01-example.zsh"
+
+# Topic-local helper stub. run.zsh auto-sources <topic>/lib/*.zsh in BOTH the
+# top-level and the per-section sub-shell, so anything dropped here is visible
+# to step files with no extra wiring. Shipped commented-out so an empty stub
+# defines nothing (sourcing it is a harmless no-op).
+if [[ -f "$PAYLOAD/template/lib/topic-helpers.zsh" ]]; then
+  cp "$PAYLOAD/template/lib/topic-helpers.zsh" "$topic_dir/lib/${topic}-helpers.zsh"
+fi
 
 # Token substitution. macOS sed needs `-i ''`; GNU sed uses `-i`.
 sedi() {
@@ -101,7 +109,9 @@ sedi() {
   fi
 }
 
-for f in "$topic_dir/run.zsh" "$topic_dir/README.md" "$topic_dir/steps/01-example.zsh"; do
+subst_files=("$topic_dir/run.zsh" "$topic_dir/README.md" "$topic_dir/steps/01-example.zsh")
+[[ -f "$topic_dir/lib/${topic}-helpers.zsh" ]] && subst_files+=("$topic_dir/lib/${topic}-helpers.zsh")
+for f in "${subst_files[@]}"; do
   sedi "s/{{TOPIC}}/$topic/g" "$f"
 done
 

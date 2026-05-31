@@ -132,6 +132,52 @@ term_a_pane_grep() {
   return 1
 }
 
+# term_a_send "<slug>" "<keys>"
+# Type a line into the session's pty as if the operator typed it, then press
+# Enter. Use to answer an interactive SUT's prompts. The literal string is
+# sent verbatim (tmux send-keys -l), so it is NOT subject to tmux key-name
+# parsing — a value like "C-c" is typed as the three characters, not Ctrl-C.
+# Pass an EMPTY string to send a bare Enter (accept a default).
+term_a_send() {
+  local slug="$1" keys="$2"
+  local session="smoke-$slug"
+  if ! tmux has-session -t "$session" 2>/dev/null; then
+    log "  TERM-A send: session $session not present — cannot send '$keys'"
+    return 1
+  fi
+  [[ -n "$keys" ]] && tmux send-keys -t "$session" -l -- "$keys"
+  tmux send-keys -t "$session" Enter
+  log "  TERM-A send   '$keys'<Enter>"
+}
+
+# term_a_answer "<slug>" "<prompt-regex>" "<reply>" [timeout]
+# Wait for <prompt-regex> to appear in the pane, then type <reply><Enter>.
+# This is the building block for scripting an interactive SUT's setup: poll
+# for the prompt the SUT prints, answer it, repeat for the next prompt. An
+# empty <reply> accepts the prompt's default (sends a bare Enter).
+#
+# Returns 0 if the prompt appeared and the reply was sent; 1 on timeout
+# (prompt never showed) — caller decides whether that is fatal.
+#
+#   term_a_start "$slug" "$SUT_BIN" init
+#   term_a_answer "$slug" "Backend .docker/container."  ""           # accept default
+#   term_a_answer "$slug" "Enter harness ids"           "claude sf"
+#
+# IMPORTANT: do NOT key your completion check on the FIRST artifact the SUT
+# writes — many tools write config in several steps and the run is only done
+# after the LAST write. Wait for an explicit completion signal (a final
+# "done" line, or a sentinel field the SUT writes last) before tearing down.
+term_a_answer() {
+  local slug="$1" prompt="$2" reply="$3" timeout="${4:-30}"
+  if term_a_pane_grep "$slug" "$prompt" "$timeout"; then
+    term_a_send "$slug" "$reply"
+    return 0
+  fi
+  log "  TERM-A answer: prompt /$prompt/ never appeared within ${timeout}s"
+  term_a_capture "$slug"
+  return 1
+}
+
 # term_a_close "<slug>"
 # Kills the tmux session, which sends SIGHUP to the spawned process tree.
 term_a_close() {

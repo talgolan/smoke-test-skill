@@ -79,6 +79,16 @@ source "$SMOKE_LIB/term-a.zsh"
 source "$SMOKE_LIB/pause.zsh"
 source "$SMOKE_LIB/history.zsh"
 
+# Topic-local helpers (optional). Anything in <topic>/lib/*.zsh is sourced
+# after the shared lib/ so it can add or override helpers for this runner.
+# MUST be kept in sync with the per-section sub-shell sourcing below — a
+# helper sourced only here is NOT visible inside the alarm-wrapped step
+# sub-shell, which is a common and confusing footgun.
+setopt local_options null_glob
+for _topic_lib in "$SCRIPT_DIR/lib/"*.zsh; do
+  source "$_topic_lib"
+done
+
 HISTORY_FILE="$SCRIPT_DIR/.history.jsonl"
 
 # Sections, in declared order. Add a step by adding `steps/NN-*.zsh`
@@ -240,6 +250,8 @@ for section in "${SECTIONS_TO_RUN[@]}"; do
     source '$SMOKE_LIB/env.zsh'
     source '$SMOKE_LIB/term-a.zsh'
     source '$SMOKE_LIB/pause.zsh'
+    setopt local_options null_glob
+    for _topic_lib in '$SCRIPT_DIR/lib/'*.zsh; do source \"\$_topic_lib\"; done
     SECTION_SLUG='${section#*-}'
     SECTION_NUM='${section%%-*}'
     export SECTION_SLUG SECTION_NUM RUN_LOG SCRIPT_DIR SMOKE_LIB INSTALL_DIR \

@@ -58,6 +58,20 @@ yet in `git log` at authoring time. There's a chicken-and-egg loop.
 
 ## Scaffolder logic (smoke-init / smoke-add)
 
+### #5 — Per-`pdir` isolation does not cover GLOBAL SUT state (docker images, global installs, daemons) — surfaced by an itb consumer (2026-05-30)
+
+**The trap.** The framework's isolation model is per-section `pdir` under `$SMOKE_ROOT`: setup creates it, teardown `rm -rf`s it. That covers filesystem state in the workspace. It does NOT cover state the SUT writes OUTSIDE the workspace — docker images/containers (global to the daemon), `npm -g`/`brew` global installs, system services, shared caches. A consumer's `sf-harness` runner used an isolated `ITB_HOME`, but `itb run` execs into a docker image (`itb-final:latest`) that is GLOBAL to the daemon. A stale image from an unrelated earlier session (different harness selection, no node) was silently reused; poststart died with `npm: command not found`. The test pointed at the install logic for ~20 min until `docker inspect <name> --format '{{.Config.Image}}'` revealed it ran the wrong image. Clearing the isolated `$HOME` did nothing.
+
+**Fix.** Added AUTHORING_GUIDE hard rule #13: enumerate the SUT's global side-effects and reset the relevant ones in Setup (e.g. `docker rmi -f <sut-image>:latest` before a build-and-run section). The diagnostic reflex — "X present in what I built but absent at runtime → check WHICH artifact the runtime actually used" — is in the rule.
+
+**Why it matters for the skill.** Any SUT that builds images, installs globally, or manages a daemon has this hazard. The guide now names it instead of leaving each author to rediscover it.
+
+### #4 — A topic helper sourced in `run.zsh` top-level is NOT visible inside the alarm-wrapped step sub-shell unless ALSO sourced there (2026-05-30)
+
+**The trap.** `run.zsh` runs each step inside a `perl -e 'alarm(N); exec' -- zsh -c "<string>"` sub-shell that re-sources the shared `lib/*.zsh` from scratch — the parent shell's functions do NOT carry in. A consumer followed the old AUTHORING_GUIDE §11 ("source it from `<topic>/run.zsh` after `lib/`"), added the source line ONCE at top level, and their first section died with `command not found: <helper>` only when the step ran. The guidance undersold that there are TWO sourcing sites.
+
+**Fix.** The template `run.zsh` now auto-sources `<topic>/lib/*.zsh` (glob, `null_glob`) in BOTH the top-level and the per-section sub-shell, and `/smoke-add` scaffolds a `<topic>/lib/<topic>-helpers.zsh` stub so authors get the pattern for free — no manual `run.zsh` edit. AUTHORING_GUIDE §11 now states the two-scope rule explicitly. Regression test `tests/add-topic-helpers.test.ts` asserts the glob appears exactly twice and that a helper function resolves inside a real step run.
+
 ### #1 — Adding a new `payload/lib/*.zsh` file requires updating `scripts/smoke-init.zsh`'s explicit `cp` list (2026-05-29)
 
 **The trap.** `scripts/smoke-init.zsh` enumerates `payload/lib/`
@@ -202,7 +216,7 @@ public-facing version of this. -->
 
 ---
 
-*Last entry: 2026-05-29 (#2 — plugin.json `author` must be object). Add
+*Last entry: 2026-05-30 (#4 topic-helper two-scope sourcing, #5 global-SUT-state hermeticity — both surfaced by the itb sf-harness consumer). Add
 new entries at the top of each section as they surface. The
 `/session-continuity:learning` command bumps this line automatically.
 Rule of thumb: if a bug takes more than 15 minutes to diagnose, it

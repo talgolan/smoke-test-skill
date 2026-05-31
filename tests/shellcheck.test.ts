@@ -10,6 +10,7 @@ const FILES = [
   "payload/lib/pause.zsh",
   "payload/lib/term-a.zsh",
   "payload/template/run.zsh",
+  "payload/template/lib/topic-helpers.zsh",
   "payload/template/steps/01-example.zsh",
   "scripts/smoke-init.zsh",
   "scripts/smoke-add.zsh",
