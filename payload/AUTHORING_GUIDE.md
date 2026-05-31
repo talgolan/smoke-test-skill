@@ -90,6 +90,8 @@ exit 0
 | `term_a_start` | `term_a_start "<slug>" <cmd> [args...]` | Detached tmux pty session. Use for any TTY-required SUT command. |
 | `term_a_wait_port` | `term_a_wait_port <port> [timeout]` | Same as `wait_for_port` but on the active tmux session, with diagnostics on fail. |
 | `term_a_pane_grep` | `term_a_pane_grep "<slug>" "<regex>" [timeout]` | Polls the pane buffer for a regex match. |
+| `term_a_send` | `term_a_send "<slug>" "<keys>"` | Type a line into the pty + Enter. Empty string → bare Enter (accept a default). For scripting an interactive SUT's prompts. |
+| `term_a_answer` | `term_a_answer "<slug>" "<prompt-regex>" "<reply>" [timeout]` | Wait for `<prompt-regex>` in the pane, then send `<reply>`+Enter. Returns 1 on timeout. See §12. |
 | `term_a_close` | `term_a_close "<slug>"` | `tmux kill-session`; sends SIGHUP to spawned process tree. |
 | `pause`  | `pause "<headline>" "<body>"` | Operator action prompt. Returns 0/1/2 for confirm/fail/skip. |
 
@@ -186,6 +188,7 @@ Each rule has a real failure attached. Provenance in parentheses.
 10. **Filter PATH by exact dir, not by binary-name substring.** When a section needs to hide a binary from PATH (proving fallback behavior), `dirname $(which <bin>)` first, then strip that exact path component. `grep -v <bin-name>` on PATH components silently misses generic dirs (`~/.bun/bin/portless` doesn't contain "portless" as a substring; the filter matches nothing and the binary stays on PATH).
 11. **Don't assert on a JSON path that varies by tool version.** Tools rewrite their config schemas across releases (`jq '.plugins | keys'` returns `[]` even when the plugin is installed because the new version writes a different file/key). Assert via multiple paths and accept any: directory existence, `find` for the name, AND `grep -q` for a substring of the canonical config file. (Originating: a plugin-isolation §3 assertion failed on a real PASS because claude rewrote `installed_plugins.json` shape.)
 12. **Renumbered sections must rename their pdir to match.** If you renumber §3 → §2, the step file's `pdir="$SMOKE_ROOT/<topic>-s${SECTION_NUM}"` updates automatically (it uses `$SECTION_NUM`), but any HARD-CODED `~/smoke/<topic>-3/` paths in the file body don't. The grep gate (§9 check 7) flags `<topic>-N/` paths that don't match the section's filename number.
+13. **Reset GLOBAL (non-workspace) SUT state in setup, not just `pdir`.** The per-section `pdir` model only isolates filesystem state under `$SMOKE_ROOT`. If the SUT also writes state that lives OUTSIDE the workspace — docker images/containers (global to the daemon), `npm -g` / `brew` global installs, system services, a shared cache or registry, a daemon's own database — clearing `pdir` (or even an isolated `$HOME`/config dir) is NOT enough. A stale global artifact from an unrelated prior run is silently reused and masks the behavior under test. Enumerate the SUT's global side-effects and reset the relevant ones in Setup (e.g. `docker rmi -f <sut-image>:latest` before a build-and-run section). (Originating: an itb smoke ran against a stale `itb-final:latest` left by an earlier session with a different harness selection; the container had no node, so `npm install` in poststart failed — but the test pointed at the symlink logic, not the stale image, until `docker inspect <name> --format '{{.Config.Image}}'` revealed which image actually started. Clearing the SUT's isolated `$HOME` did nothing because the image chain is global to the docker daemon.)
 
 ---
 
@@ -264,3 +267,38 @@ Examples:
 - Project-specific (goes in `<topic>/lib/`): `assert_my_apps_health_endpoint`, `parse_my_custom_log_format`.
 
 When adding to `lib/`: add a row to `lib/README.md`, expose the helper as a top-level function (no `local` for the function name), document required env vars at the top.
+
+### Topic-local helpers are auto-sourced (both scopes)
+
+`/smoke-add` scaffolds an empty `<topic>/lib/<topic>-helpers.zsh` stub. `run.zsh` sources every `<topic>/lib/*.zsh` file in **two** places: once at top level, and once inside the per-section `alarm`-wrapped sub-shell that actually runs your step. **Both** matter — a helper available at top level but not in the sub-shell throws `command not found` only when the step runs, which is a confusing failure. Because the scaffold wires both, just define your function in the stub and it is visible to every step. If you add a *second* helper file, drop it in `<topic>/lib/` too — the glob picks it up; you do not edit `run.zsh`.
+
+---
+
+## 12. Driving an interactive SUT
+
+Some SUTs prompt during setup (a first-run wizard, a `[Y/n]` confirmation, a multi-choice selector). `pause` is for prompting the *operator*; to answer the *SUT's own* prompts, script them through the pty.
+
+Pattern: spawn the SUT with `term_a_start`, then `term_a_answer` once per prompt — it waits for the prompt text, types the reply, and returns. Finally wait for an explicit **completion signal** before asserting or tearing down.
+
+```zsh
+term_a_start "$slug" "$SUT_BIN" init
+term_a_answer "$slug" "Backend .docker/container."  ""           # Enter = accept default
+term_a_answer "$slug" "Enter harness ids"           "claude sf"
+
+# Wait for the SUT to FINISH — not for the first file it writes.
+# Key on a sentinel the SUT writes LAST (here: completedInit:true).
+ready=false
+for _ in {1..20}; do
+  if [[ -f "$cfg" ]] && jq -e '.completedInit == true' "$cfg" >/dev/null 2>&1; then
+    ready=true; break
+  fi
+  sleep 1
+done
+$ready && pass "init completed" || { fail "init did not complete"; exit 1; }
+```
+
+Three rules that each cost a real debugging session:
+
+1. **Wait for the prompt, don't guess timing.** `term_a_answer` polls the pane for the prompt regex. Don't `sleep 3; term_a_send` — prompt latency varies and a blind send races the SUT.
+2. **Key completion on the LAST write, never the first.** Multi-step wizards write config in stages. If you tear down (or assert) the moment the first artifact appears, you truncate the SUT mid-write and later stages never land. Find a field/line the SUT emits *last* (a `completedInit` flag, a final "done" banner) and wait for that.
+3. **Use a clean shell for the pty when the SUT prompt collides with your login shell.** `term_a_start` inherits your environment; an interactive `zsh` with oh-my-zsh update prompts or `chsh` notices can swallow the first keystroke you send. If that bites, start the session under `bash` (`term_a_start "$slug" bash` then `term_a_send` the command) so no rc-file prompt competes for input.

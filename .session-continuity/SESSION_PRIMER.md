@@ -96,6 +96,25 @@ No external services, no credentials, no costs.
 
 ## Current state
 
+- **v0.3.0 in progress on `feat/interactive-driving-and-helper-autowire`.**
+  Three improvements driven by the first real external consumer (itb's
+  sf-harness runner — see LEARNINGS #4, #5):
+  1. **Topic-helper auto-wiring.** `payload/template/run.zsh` now sources
+     `<topic>/lib/*.zsh` (glob) in BOTH the top-level and the per-section
+     alarm sub-shell. `/smoke-add` scaffolds a `<topic>/lib/<topic>-helpers.zsh`
+     stub. Fixes the footgun where a helper sourced once (top level) threw
+     `command not found` inside the step sub-shell.
+  2. **Interactive-SUT primitives.** New `term_a_send` + `term_a_answer` in
+     `payload/lib/term-a.zsh` for scripting a SUT's own prompts (wizards,
+     `[Y/n]`). New AUTHORING_GUIDE §12 "Driving an interactive SUT" (wait for
+     the prompt, key completion on the LAST write, use a clean shell for the pty).
+  3. **Global-state hermeticity rule.** AUTHORING_GUIDE hard rule #13: reset
+     GLOBAL SUT state (docker images, global installs, daemons) in Setup —
+     per-`pdir` isolation doesn't cover it.
+  Tests: 35 → 40 (+ `add-topic-helpers` ×3, `term-a-interactive` ×1, shellcheck
+  +1 for the stub). `bun test` 40/40. `plugin.json` 0.2.0 → 0.3.0. NOTE: `tsc
+  --noEmit` exits 2 on a PRE-EXISTING strict-null error in `init-force.test.ts`
+  (also fails on `main`); project gate is `bun test`, not tsc — out of scope here.
 - v0.2.0 shipped on `main` (commit `29e2eb7`, PR #2 squash-merged).
   README comprehensive; manual sandbox integration test passed.
 - v0.1.0 shipped earlier on `main` (commit `ddec1d0`). PR #1
@@ -119,11 +138,11 @@ No external services, no credentials, no costs.
 **Current `git log --oneline -5` (HEAD):**
 
 ```
+1a798c2 feat: topic-helper auto-wiring + interactive-SUT primitives (v0.3.0)   [feat/interactive-driving-and-helper-autowire]
+bf90123 docs: update session continuity
 29e2eb7 feat: duration history + adaptive smoke runs (v0.2.0) (#2)
 ddec1d0 docs(learnings): #3 — primer log block can't include shipping commit SHA
 538cd7f docs(primer): fill in HEAD log block placeholder
-68ddb68 feat(smoke-add): explicit --install-path + .git fallback discovery
-f4f9d7f docs(primer): catch-up — main now at 7dc789b after marketplace fixes
 ```
 
 Regenerate this block whenever you commit — see "Primer maintenance"

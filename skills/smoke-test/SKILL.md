@@ -38,7 +38,7 @@ Args (all optional except interactive prompts will fill the gaps):
 
 ### `/smoke-add <topic>`
 
-Walks up from `$PWD` to find `.smokerc`, then scaffolds `<install-path>/<topic>/` with `run.zsh`, `steps/01-example.zsh`, `README.md`. Refuses if `<topic>` dir exists.
+Walks up from `$PWD` to find `.smokerc`, then scaffolds `<install-path>/<topic>/` with `run.zsh`, `steps/01-example.zsh`, `README.md`, and a `lib/<topic>-helpers.zsh` stub (auto-sourced by `run.zsh` in both scopes). Refuses if `<topic>` dir exists.
 
 ## Hard rules (every session)
 
@@ -66,6 +66,8 @@ Walks up from `$PWD` to find `.smokerc`, then scaffolds `<install-path>/<topic>/
 └── <first-topic>/
     ├── run.zsh              # controller
     ├── .history.jsonl       # per-section duration history (append-only, capped)
+    ├── lib/                 # topic-local helpers, auto-sourced (both scopes)
+    │   └── <topic>-helpers.zsh
     ├── steps/01-example.zsh
     ├── logs/
     └── README.md
