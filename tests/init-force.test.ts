@@ -35,7 +35,7 @@ test("smoke-init --force creates sibling backup dir with prior contents", () => 
     const backups = siblings.filter(s => s.startsWith("smoke.backup-"));
     expect(backups.length).toBe(1);
 
-    const backupDir = join(work, backups[0]);
+    const backupDir = join(work, backups[0]!);
     expect(existsSync(join(backupDir, "lib"))).toBe(true);
     expect(existsSync(join(backupDir, "AUTHORING_GUIDE.md"))).toBe(true);
     expect(existsSync(join(backupDir, ".smokerc"))).toBe(true);

@@ -112,9 +112,10 @@ No external services, no credentials, no costs.
      GLOBAL SUT state (docker images, global installs, daemons) in Setup —
      per-`pdir` isolation doesn't cover it.
   Tests: 35 → 40 (+ `add-topic-helpers` ×3, `term-a-interactive` ×1, shellcheck
-  +1 for the stub). `bun test` 40/40. `plugin.json` 0.2.0 → 0.3.0. NOTE: `tsc
-  --noEmit` exits 2 on a PRE-EXISTING strict-null error in `init-force.test.ts`
-  (also fails on `main`); project gate is `bun test`, not tsc — out of scope here.
+  +1 for the stub). `bun test` 40/40, `tsc --noEmit` clean. `plugin.json`
+  0.2.0 → 0.3.0. Also fixed a pre-existing strict-null tsc error in
+  `init-force.test.ts` (`backups[0]` → `backups[0]!`) that had `tsc` red on
+  `main` — `tsc --noEmit` is now a clean gate again.
 - v0.2.0 shipped on `main` (commit `29e2eb7`, PR #2 squash-merged).
   README comprehensive; manual sandbox integration test passed.
 - v0.1.0 shipped earlier on `main` (commit `ddec1d0`). PR #1
