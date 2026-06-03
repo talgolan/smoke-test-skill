@@ -7,6 +7,7 @@ const SKILL_ROOT = join(import.meta.dir, "..");
 const FILES = [
   "payload/lib/env.zsh",
   "payload/lib/log.zsh",
+  "payload/lib/control.zsh",
   "payload/lib/pause.zsh",
   "payload/lib/term-a.zsh",
   "payload/template/run.zsh",
