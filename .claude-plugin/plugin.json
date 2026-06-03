@@ -1,6 +1,6 @@
 {
   "name": "smoke-test-skill",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Scaffold an executable smoke-test framework into any project. Two slash commands: /smoke-init scaffolds the framework + first runner; /smoke-add scaffolds additional runners.",
   "author": {
     "name": "Tal Golan"

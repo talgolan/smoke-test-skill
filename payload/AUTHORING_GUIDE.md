@@ -87,6 +87,8 @@ exit 0
 | `sect`   | one arg | Emits a `=== <header> ===` divider. Use once per section. |
 | `pass` / `fail` / `skip` | one arg (label) | Explicit result emission. `pass`/`fail` increment counters. `skip` doesn't. |
 | `wait_for_port` | `wait_for_port <port> [timeout]` | Polls 127.0.0.1:port for a LISTEN. Returns 0/1. **Use this instead of `nc -z` — BSD `nc` and GNU `nc` disagree on flags (BSD: `-z host port`, GNU: `-zv host port`); same script breaks crossing macOS↔Linux.** |
+| `poll_until` | `poll_until <success-cmd> <failure-cmd> <timeout> [interval]` | Poll BOTH a success and a failure signal. Returns `0` (success), `2` (failure signal fired — abort fast), `1` (timeout). Pass `""` for failure-cmd to poll success-only (discouraged — see §8 rule 14). |
+| `smoke_keep_on_fail` | `smoke_keep_on_fail` | True when `SMOKE_KEEP_ON_FAIL` is set AND this section failed. Guard teardown with it to leave diagnostic state alive. Pair with `keep_on_fail_notice <handle>...`. See §10. |
 | `term_a_start` | `term_a_start "<slug>" <cmd> [args...]` | Detached tmux pty session. Use for any TTY-required SUT command. |
 | `term_a_wait_port` | `term_a_wait_port <port> [timeout]` | Same as `wait_for_port` but on the active tmux session, with diagnostics on fail. |
 | `term_a_pane_grep` | `term_a_pane_grep "<slug>" "<regex>" [timeout]` | Polls the pane buffer for a regex match. |
@@ -190,6 +192,12 @@ Each rule has a real failure attached. Provenance in parentheses.
 12. **Renumbered sections must rename their pdir to match.** If you renumber §3 → §2, the step file's `pdir="$SMOKE_ROOT/<topic>-s${SECTION_NUM}"` updates automatically (it uses `$SECTION_NUM`), but any HARD-CODED `~/smoke/<topic>-3/` paths in the file body don't. The grep gate (§9 check 7) flags `<topic>-N/` paths that don't match the section's filename number.
 13. **Reset GLOBAL (non-workspace) SUT state in setup, not just `pdir`.** The per-section `pdir` model only isolates filesystem state under `$SMOKE_ROOT`. If the SUT also writes state that lives OUTSIDE the workspace — docker images/containers (global to the daemon), `npm -g` / `brew` global installs, system services, a shared cache or registry, a daemon's own database — clearing `pdir` (or even an isolated `$HOME`/config dir) is NOT enough. A stale global artifact from an unrelated prior run is silently reused and masks the behavior under test. Enumerate the SUT's global side-effects and reset the relevant ones in Setup (e.g. `docker rmi -f <sut-image>:latest` before a build-and-run section). (Originating: an itb smoke ran against a stale `itb-final:latest` left by an earlier session with a different harness selection; the container had no node, so `npm install` in poststart failed — but the test pointed at the symlink logic, not the stale image, until `docker inspect <name> --format '{{.Config.Image}}'` revealed which image actually started. Clearing the SUT's isolated `$HOME` did nothing because the image chain is global to the docker daemon.)
 
+14. **Poll BOTH a success and a failure signal — never success only.** A loop that waits for the success artifact to appear and nothing else burns the entire timeout on every failure, and can't tell "slow" from "broken". Watch the failure signal too (an error sidecar file, a `failed-*.txt` marker, a non-zero status the SUT records) and abort the instant it fires, with the real reason. Use the `poll_until <success> <failure> <timeout>` helper (returns 0/2/1 for success/failure/timeout). (Originating: an itb §3 waited only for `~/.local/bin/sf` to appear; when poststart's `npm install` failed, the section sat through its full 120s budget and reported "did not install" instead of "install FAILED — here's the log". Watching `failed-harnesses.txt` aborts in ~2s with the cause.)
+
+15. **`verify` / `poll_until` `eval` their command string in the HOST shell — `$VAR` expands host-side, even inside an inner `docker exec`.** `verify "label" "cmd"` runs `eval "$cmd"` in the runner's host zsh (`lib/log.zsh`). Every `$HOME`, `$VAR`, and backtick in that string — including ones buried inside an inner `docker exec <name> bash -lc "... $HOME ..."` — is expanded by the HOST before the string ever reaches the container. `$HOME` becomes the host home, not `/home/<container-user>`; a host-unset var becomes empty. Rule: in any string passed to `verify`/`poll_until` that targets the container, use **fully-literal container paths** (`/home/assistant/.local/bin/sf`), never `$HOME` or host-resolved vars. Assign the literal to a local (`SF=/home/assistant/.local/bin/sf`) and reference that. (Same family as the eval-interpolation footgun: an itb §3 `sf` call resolved `$HOME` to the operator's Mac home and the in-container path silently pointed nowhere.)
+
+16. **Size the container/service ready-wait against a COLD build, not a warm one.** Readiness timeouts that pass on a warm cache (image already built, deps already installed) silently fail the first time the section runs cold — a from-scratch image build (apt + a runtime toolchain can be ~2 min; slower on some backends) blows past a 120s wait that was tuned on warm runs. Size the ready-wait against the section's `BUDGET_SECONDS` ceiling (e.g. 480s wait under a 600s budget), not the warm-run time. If the build and the ready-wait share a budget, the wait must leave headroom for the assertions that follow. (Originating: an itb §3 ready-wait of 120s passed every warm re-run and failed on the first cold-cache run, where the harness+user image stages alone took longer than the wait.)
+
 ---
 
 ## 9. Grep gate (run before committing a step file)
@@ -225,11 +233,16 @@ nn=${fname%%-*}                 # 03
 topic=$(basename "$(dirname "$(dirname "$F")")")   # parent's parent dir name
 grep -nE "${topic}-[0-9]+" "$F" | grep -vE "${topic}-${nn}\\b|${topic}-\\\$\\{SECTION_NUM\\}|${topic}-s\\\$\\{SECTION_NUM\\}"
 
-# 8. zsh -n syntax check
+# 8. $HOME (or other host-resolved var) inside a docker/container exec string —
+#    expands HOST-side via verify/poll_until's eval (§8 rule 15). Use a literal
+#    container path instead.
+grep -nE '(docker|container) exec.*\$HOME' "$F"
+
+# 9. zsh -n syntax check
 zsh -n "$F" && echo "syntax OK"
 ```
 
-Hits on 1, 2, 3, 5, 6, or 7 → fix. Hits on 4 → confirm the long sleep is intentional + add a comment explaining why. Check 8 must succeed.
+Hits on 1, 2, 3, 5, 6, 7, or 8 → fix. Hits on 4 → confirm the long sleep is intentional + add a comment explaining why. Check 9 must succeed.
 
 ---
 
@@ -244,6 +257,29 @@ tail -n 50 <topic>/logs/run-<latest>.log
 ```
 
 For sections that spawn the SUT in tmux, also tail the pane log: `<topic>/logs/<NN>-<slug>-pane.log`. If a tail at `p95 + 30s` shows no progress and the section's p50 is well under that, kill the run (`pkill -f run.zsh`, plus `tmux kill-session -t <slug>` for any active term-a sessions) rather than waiting out `BUDGET_SECONDS`. The budget is an upper bound, not a health check.
+
+### Preserving evidence on failure
+
+Sections tear down on EVERY exit by default (`rm -rf $pdir`, `docker rm`, kill the tmux session). That is correct for a passing run, but on a FAILURE it destroys the one thing you need: the live state that holds the cause. When the failure follows an expensive setup (a cold image build, a real install, a multi-step wizard), re-running to reproduce costs that whole setup again.
+
+Guard teardown with `smoke_keep_on_fail`: when the operator runs with `SMOKE_KEEP_ON_FAIL=1` AND the section recorded a failure, skip teardown and print the live handles to probe.
+
+```zsh
+sect "§${SECTION_NUM}-teardown"
+if smoke_keep_on_fail; then
+  keep_on_fail_notice "container: $NAME" "itb_home: $itb_home" "login.out: $login_out"
+  exit 1
+fi
+term_a_close "$slug"
+docker rm -f "$NAME" >>"$RUN_LOG" 2>&1 || true
+rm -rf "$pdir"
+exit 0
+```
+
+Two companion rules:
+
+- **Surface the diagnostic INTO `$RUN_LOG` in the failure branch BEFORE any teardown** — even when keep-on-fail is off. Dump the relevant log (redacted; see §13) at the point of failure; never delete a capture file and then assert on it. The default run still tears down, so a diagnostic that only lives in `$pdir` is gone by the time you read the summary.
+- `SMOKE_KEEP_ON_FAIL` leaves global state alive (containers, isolated `$HOME`s). Clean it up by hand once you're done probing — the next run's §13-rule-13 global reset will also clear it, but don't rely on that across unrelated runners.
 
 ### After a failure
 
@@ -302,3 +338,33 @@ Three rules that each cost a real debugging session:
 1. **Wait for the prompt, don't guess timing.** `term_a_answer` polls the pane for the prompt regex. Don't `sleep 3; term_a_send` — prompt latency varies and a blind send races the SUT.
 2. **Key completion on the LAST write, never the first.** Multi-step wizards write config in stages. If you tear down (or assert) the moment the first artifact appears, you truncate the SUT mid-write and later stages never land. Find a field/line the SUT emits *last* (a `completedInit` flag, a final "done" banner) and wait for that.
 3. **Use a clean shell for the pty when the SUT prompt collides with your login shell.** `term_a_start` inherits your environment; an interactive `zsh` with oh-my-zsh update prompts or `chsh` notices can swallow the first keystroke you send. If that bites, start the session under `bash` (`term_a_start "$slug" bash` then `term_a_send` the command) so no rc-file prompt competes for input.
+
+---
+
+## 13. Testing against a real authenticated service
+
+Some contracts can only be proven against a live, authed external service (a cloud API, an org login, a registry that requires a token). That means a real credential enters the run. Four rules keep it safe and the section honest.
+
+1. **Skip cleanly when the credential source is absent — don't fail.** The credential comes from the operator's own already-authed host state (a CLI keychain, an env var, a token file), never from a secret committed to the repo. If it's not there, `skip` with a one-line "log in on the host first" hint and `exit 0`. A missing host credential is an environment gap, not a SUT bug — failing on it makes the whole run red for everyone who hasn't authed.
+
+   ```zsh
+   ORG=$(resolve_host_credential)   # an org alias / username — NOT the secret
+   if [[ -z "$ORG" ]]; then
+     skip "§${SECTION_NUM}: no connected host org. Log in first, e.g. sf org login web"
+     exit 0
+   fi
+   ```
+
+2. **The secret crosses into the SUT ONLY as an env var — never argv, never a config file the test writes.** Process args (`ps`, `/proc/<pid>/cmdline`) and on-disk config are observable; an env var passed to a single `docker exec -e` is the narrowest channel. Non-secret context (an instance URL, a username, an org alias) is fine to interpolate and log.
+
+   ```zsh
+   # token via -e (not argv); $INSTANCE_URL is not secret, safe to interpolate
+   docker exec --user assistant -e SVC_TOKEN="$TOKEN" "$NAME" \
+     bash -lc "$SVC login --token-from-env --url '$INSTANCE_URL'" >"$out" 2>&1
+   ```
+
+3. **The secret must never reach `$RUN_LOG` or the summary.** Capture the SUT's auth output to a file you do NOT `tee` verbatim. On failure, redact before surfacing: `sed -E 's/<secret-pattern>/<REDACTED>/g'` the capture into the log so the diagnostic survives teardown (§10) without leaking the token. Log only the rc and the non-secret context.
+
+4. **Prefer a read-only round-trip for the assertion.** Prove auth worked with a cheap GET that makes no permission assumptions and mutates nothing (list limits, whoami, a metadata read) — not a write. The contract is "the SUT can authenticate and reach the service", which a read proves.
+
+Reference implementation: itb's `sf-harness/steps/03-sf-org-auth.zsh` — extracts a live access token on the host, forwards it via `docker exec -e`, logs in inside the container, asserts `connectedStatus == Connected` + a `list limits` round-trip, redacts org-id tokens on any failure dump, and self-skips when no host org is connected.

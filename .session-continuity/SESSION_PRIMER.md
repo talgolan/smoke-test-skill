@@ -69,10 +69,10 @@ Edit source here. The "target project" in test fixtures lives under
 ## Test expectations — these must stay green
 
 ```
-bun test   # 35 pass / 0 fail
+bun test   # 50 pass / 0 fail
 ```
 
-8 of the 35 tests run `shellcheck` against shipped zsh files. They
+9 of the 50 tests run `shellcheck` against shipped zsh files. They
 require `shellcheck` on `$PATH` — without it they fail
 environmentally (Ubuntu: `sudo apt-get install shellcheck`; macOS:
 `brew install shellcheck`). If non-shellcheck tests regress,
@@ -96,26 +96,34 @@ No external services, no credentials, no costs.
 
 ## Current state
 
-- **v0.3.0 in progress on `feat/interactive-driving-and-helper-autowire`.**
-  Three improvements driven by the first real external consumer (itb's
-  sf-harness runner — see LEARNINGS #4, #5):
-  1. **Topic-helper auto-wiring.** `payload/template/run.zsh` now sources
-     `<topic>/lib/*.zsh` (glob) in BOTH the top-level and the per-section
-     alarm sub-shell. `/smoke-add` scaffolds a `<topic>/lib/<topic>-helpers.zsh`
-     stub. Fixes the footgun where a helper sourced once (top level) threw
-     `command not found` inside the step sub-shell.
-  2. **Interactive-SUT primitives.** New `term_a_send` + `term_a_answer` in
-     `payload/lib/term-a.zsh` for scripting a SUT's own prompts (wizards,
-     `[Y/n]`). New AUTHORING_GUIDE §12 "Driving an interactive SUT" (wait for
-     the prompt, key completion on the LAST write, use a clean shell for the pty).
-  3. **Global-state hermeticity rule.** AUTHORING_GUIDE hard rule #13: reset
-     GLOBAL SUT state (docker images, global installs, daemons) in Setup —
-     per-`pdir` isolation doesn't cover it.
-  Tests: 35 → 40 (+ `add-topic-helpers` ×3, `term-a-interactive` ×1, shellcheck
-  +1 for the stub). `bun test` 40/40, `tsc --noEmit` clean. `plugin.json`
-  0.2.0 → 0.3.0. Also fixed a pre-existing strict-null tsc error in
-  `init-force.test.ts` (`backups[0]` → `backups[0]!`) that had `tsc` red on
-  `main` — `tsc --noEmit` is now a clean gate again.
+- **v0.4.0 on `feat/v0.4.0-evidence-preservation`.** Backports the 5
+  improvements the itb sf-integration-smoke work surfaced (itb LEARNINGS
+  #118 + 5 serial §3 failures). New `payload/lib/control.zsh`:
+  1. **`smoke_keep_on_fail`** + `keep_on_fail_notice` — guard teardown so a
+     failed run leaves diagnostic state alive (`SMOKE_KEEP_ON_FAIL=1` AND
+     `FAIL_COUNT>0`; FAIL_COUNT is live in the per-section sub-shell). New
+     AUTHORING_GUIDE §10 "Preserving evidence on failure".
+  2. **`poll_until <success> <failure> <timeout> [interval]`** — poll BOTH
+     signals (rc 0=success / 2=failure / 1=timeout) so a fast failure aborts
+     early instead of burning the budget. Guide hard-rule #14.
+  3. **eval-host-expansion rule** — `verify`/`poll_until` `eval` their string
+     HOST-side, so `$HOME` inside an inner `docker exec` expands to the host
+     home. Use literal container paths. Guide hard-rule #15 + grep-gate #8.
+  4. **cold-build ready-wait** — size the wait vs `BUDGET_SECONDS`, not warm
+     time. Guide hard-rule #16.
+  5. **secret handling** — new guide §13 "Testing against a real authenticated
+     service" (skip-when-absent, env-var-only crossing, redact-before-log,
+     read-only assertion).
+  Wiring: control.zsh cp'd in `scripts/smoke-init.zsh`, sourced ×2 in
+  `payload/template/run.zsh` (top-level + alarm sub-shell), shellcheck FILES,
+  lib/README row. `tests/control.test.ts` +9. Tests 41 → 50, `bun test` 50/0,
+  shellcheck green, `tsc --noEmit` clean. `plugin.json` 0.3.0 → 0.4.0. NOTE:
+  itb's `docs/superpowers/smoke-tests/lib/` is a v0.3.0 snapshot — re-pull to
+  get the new helpers.
+- **v0.3.0 shipped on `main` (commit `a20f7a1`, PR #3 squash-merged).**
+  Topic-helper auto-wiring (`run.zsh` sources `<topic>/lib/*.zsh` in both
+  scopes), interactive-SUT primitives (`term_a_send`/`term_a_answer` + guide
+  §12), global-state hermeticity rule (guide #13). Tests 35 → 40/41.
 - v0.2.0 shipped on `main` (commit `29e2eb7`, PR #2 squash-merged).
   README comprehensive; manual sandbox integration test passed.
 - v0.1.0 shipped earlier on `main` (commit `ddec1d0`). PR #1

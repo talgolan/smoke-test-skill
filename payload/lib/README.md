@@ -8,6 +8,7 @@ Reusable zsh helpers sourced by every runner's `run.zsh`.
 |--------------|---------|
 | `env.zsh`    | Validates `.smokerc` (`SUT_BIN`, `SUT_REPO`, `BUILD_CMD`); sets `SMOKE_ROOT`; provides `wait_for_port`. Refuses to run if `$SUT_BIN` not executable. |
 | `log.zsh`    | `log` / `info` / `warn` / `err` / `sect` plus `pass` / `fail` / `skip` / `verify` / `run` helpers. Tees everything to `$RUN_LOG` and stdout. |
+| `control.zsh` | `poll_until <success-cmd> <failure-cmd> <timeout> [interval]` (returns 0=success, 2=failure signal, 1=timeout — poll BOTH signals so a fast failure aborts early); `smoke_keep_on_fail` (true when `SMOKE_KEEP_ON_FAIL` set AND section failed — guard teardown to preserve evidence); `keep_on_fail_notice <handle>...` (print live diagnostic handles). |
 | `term-a.zsh` | tmux detached-session spawn / pane-grep / capture / close, plus `term_a_send` + `term_a_answer` for scripting an interactive SUT's prompts. Use for any step that needs a real TTY (`docker run -it`, anything that calls `stty`) or that must answer a SUT's own setup wizard. |
 | `pause.zsh`  | `pause "<headline>" "<body>"` for operator-action steps; `confirm "<question>"` y/n prompt. Both read from `/dev/tty`. |
 | `history.zsh` | Per-section duration history + adaptive recommendations. Public functions: `history_stats <file> <section>`, `history_recommend_poll <p95>`, `history_recommend_budget <p95>`, `history_is_outlier <duration> <p50>`, `history_append <file> <section> <duration> <result> <budget>`, `history_cap <file>`. Soft-fails on every disk error — never breaks a run. |
@@ -18,6 +19,7 @@ Reusable zsh helpers sourced by every runner's `run.zsh`.
 # In your <topic>/run.zsh, after sourcing .smokerc:
 source "$SMOKE_LIB/log.zsh"
 source "$SMOKE_LIB/env.zsh"
+source "$SMOKE_LIB/control.zsh"
 source "$SMOKE_LIB/term-a.zsh"
 source "$SMOKE_LIB/pause.zsh"
 source "$SMOKE_LIB/history.zsh"

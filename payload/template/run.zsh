@@ -75,6 +75,7 @@ export RUN_LOG SCRIPT_DIR SMOKE_LIB INSTALL_DIR
 
 source "$SMOKE_LIB/log.zsh"
 source "$SMOKE_LIB/env.zsh"
+source "$SMOKE_LIB/control.zsh"
 source "$SMOKE_LIB/term-a.zsh"
 source "$SMOKE_LIB/pause.zsh"
 source "$SMOKE_LIB/history.zsh"
@@ -248,6 +249,7 @@ for section in "${SECTIONS_TO_RUN[@]}"; do
   /usr/bin/perl -e "alarm($budget); exec @ARGV" -- /bin/zsh -c "
     source '$SMOKE_LIB/log.zsh'
     source '$SMOKE_LIB/env.zsh'
+    source '$SMOKE_LIB/control.zsh'
     source '$SMOKE_LIB/term-a.zsh'
     source '$SMOKE_LIB/pause.zsh'
     setopt local_options null_glob
