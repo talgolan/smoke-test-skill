@@ -147,11 +147,11 @@ No external services, no credentials, no costs.
 **Current `git log --oneline -5` (HEAD):**
 
 ```
-1a798c2 feat: topic-helper auto-wiring + interactive-SUT primitives (v0.3.0)   [feat/interactive-driving-and-helper-autowire]
+501fea8 feat: evidence-preservation + dual-signal polling (v0.4.0) (#4)
+a20f7a1 feat: topic-helper auto-wiring + interactive-SUT primitives (v0.3.0) (#3)
 bf90123 docs: update session continuity
 29e2eb7 feat: duration history + adaptive smoke runs (v0.2.0) (#2)
 ddec1d0 docs(learnings): #3 — primer log block can't include shipping commit SHA
-538cd7f docs(primer): fill in HEAD log block placeholder
 ```
 
 Regenerate this block whenever you commit — see "Primer maintenance"
