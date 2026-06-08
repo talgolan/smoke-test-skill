@@ -69,7 +69,7 @@ Edit source here. The "target project" in test fixtures lives under
 ## Test expectations — these must stay green
 
 ```
-bun test   # 50 pass / 0 fail
+bun test   # 54 pass / 0 fail  (53 pass + 2 flaky history #3/#4 timeouts; see Outstanding #1)
 ```
 
 9 of the 50 tests run `shellcheck` against shipped zsh files. They
@@ -96,6 +96,21 @@ No external services, no credentials, no costs.
 
 ## Current state
 
+- **v0.5.0 — lib-sync (itb #21) on `feat/21-lib-sync`.** `/smoke-add` never
+  re-copied the shared `lib/` — only `/smoke-init` did. So a newer `run.zsh`
+  sourcing a helper the frozen lib lacked (e.g. `control.zsh`, v0.4.0) died at
+  `--list`. Fix = version-gated sync. New `scripts/lib-sync.zsh` (single source
+  of truth, 3 fns: `skill_version` / `sync_lib` / `version_lt`). Both
+  scaffolders source it: `smoke-init` calls `sync_lib` in place of its inlined
+  8-`cp` block (refactor, behavior unchanged); `smoke-add` compares installed
+  `lib/.skill-version` to `plugin.json` version and re-copies when behind
+  (missing stamp → `0.0.0` → sync; installed > skill → stderr note, never
+  downgrade). `version_lt` is pure-zsh field-wise semver compare with `10#`
+  base-10 forcing (octal trap). `tests/add-lib-sync.test.ts` +4 (all PASS);
+  shellcheck FILES +`lib-sync.zsh` with SC2296 disabled (zsh `${(@s:.:)x}`
+  split flag). `plugin.json` 0.4.0 → 0.5.0 so downstream detects the skew and
+  pulls lib-sync itself. tsc clean. Spec:
+  `docs/superpowers/specs/2026-06-04-smoke-add-lib-sync-design.md`.
 - **v0.4.0 on `feat/v0.4.0-evidence-preservation`.** Backports the 5
   improvements the itb sf-integration-smoke work surfaced (itb LEARNINGS
   #118 + 5 serial §3 failures). New `payload/lib/control.zsh`:
@@ -144,14 +159,14 @@ No external services, no credentials, no costs.
   `<topic>/.history.jsonl` is committed by default. 8 new history
   tests + runner-smoke assertion of banner.
 
-**Current `git log --oneline -5` (HEAD):**
+**Current `git log --oneline -5` (HEAD, pre-this-commit per LEARNINGS #3):**
 
 ```
+21f7117 docs(spec): version-gated lib sync in smoke-add (#21)
+a033baf docs(primer): sync HEAD log block to post-#4 main (v0.4.0)
 501fea8 feat: evidence-preservation + dual-signal polling (v0.4.0) (#4)
 a20f7a1 feat: topic-helper auto-wiring + interactive-SUT primitives (v0.3.0) (#3)
 bf90123 docs: update session continuity
-29e2eb7 feat: duration history + adaptive smoke runs (v0.2.0) (#2)
-ddec1d0 docs(learnings): #3 — primer log block can't include shipping commit SHA
 ```
 
 Regenerate this block whenever you commit — see "Primer maintenance"
@@ -159,8 +174,15 @@ below.
 
 ## Outstanding items (explicitly deferred — not bugs, decisions)
 
-_None at HEAD._ Previous outstanding #1 (walk-up boundary UX gap)
-resolved — see "Current state".
+1. **Flaky `history #3`/`#4` (5005ms timeouts).** Both call
+   `setupRunner({ sleepSeconds: 3 })` — a real runner step sleeps 3s; with
+   tmux + scaffold + history overhead the wall time brushes the 5000ms bun
+   default test timeout, so they intermittently fail (confirmed pre-existing —
+   fail on baseline before #21 too). Fix candidates: raise per-test timeout
+   (`test(..., { timeout: 15000 })`), or drop `sleepSeconds` to 1–2s and adjust
+   the outlier/drift assertions accordingly. NOT a lib-sync regression. Own PR.
+
+Previous outstanding #1 (walk-up boundary UX gap) resolved — see "Current state".
 
 ## Workflow conventions
 
