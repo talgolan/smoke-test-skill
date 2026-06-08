@@ -11,6 +11,13 @@ const SKILL_ROOT = join(import.meta.dir, "..");
 const INIT = join(SKILL_ROOT, "scripts", "smoke-init.zsh");
 const FAKE_SUT = join(SKILL_ROOT, "tests", "fixtures", "fake-sut.zsh");
 
+// Every test here shells out to zsh + tmux (and #3 sleeps 3s). Run alone the
+// file finishes in ~10s, but `bun test` runs files in parallel, so under CPU
+// contention a single test can brush the 5000ms default per-test timeout and
+// flake (observed on #3/#4). Give the subprocess-heavy tests a generous
+// ceiling — it only caps the worst case; fast runs are unaffected.
+const TIMEOUT = 30_000;
+
 interface InitResult {
   workDir: string;
   runnerPath: string;
@@ -77,7 +84,7 @@ test("history #1 — empty history: file created, banner shows (no history)", ()
   } finally {
     rmSync(workDir, { recursive: true, force: true });
   }
-});
+}, TIMEOUT);
 
 test("history #2 — stats computed: seeded p50/p95 surface in banner", () => {
   const { workDir, runnerPath, historyFile } = setupRunner();
@@ -95,7 +102,7 @@ test("history #2 — stats computed: seeded p50/p95 surface in banner", () => {
   } finally {
     rmSync(workDir, { recursive: true, force: true });
   }
-});
+}, TIMEOUT);
 
 test("history #3 — outlier annotation: 2x median triggers ⚠ marker", () => {
   const { workDir, runnerPath, historyFile } = setupRunner({ sleepSeconds: 3 });
@@ -115,7 +122,7 @@ test("history #3 — outlier annotation: 2x median triggers ⚠ marker", () => {
   } finally {
     rmSync(workDir, { recursive: true, force: true });
   }
-});
+}, TIMEOUT);
 
 test("history #4 — drift warning: p95 ≥ budget emits WARN with recommended budget", () => {
   const { workDir, runnerPath, historyFile } = setupRunner();
@@ -143,7 +150,7 @@ test("history #4 — drift warning: p95 ≥ budget emits WARN with recommended b
   } finally {
     rmSync(workDir, { recursive: true, force: true });
   }
-});
+}, TIMEOUT);
 
 test("history #4b — drift warning fires when env BUDGET_SECONDS not set", () => {
   const { workDir, runnerPath, historyFile } = setupRunner();
@@ -169,7 +176,7 @@ test("history #4b — drift warning fires when env BUDGET_SECONDS not set", () =
   } finally {
     rmSync(workDir, { recursive: true, force: true });
   }
-});
+}, TIMEOUT);
 
 test("history #5 — cap policy: keeps last 50 PASS + last 10 non-PASS per section", () => {
   const { workDir, runnerPath, historyFile } = setupRunner();
@@ -207,7 +214,7 @@ test("history #5 — cap policy: keeps last 50 PASS + last 10 non-PASS per secti
   } finally {
     rmSync(workDir, { recursive: true, force: true });
   }
-});
+}, TIMEOUT);
 
 test("history #6 — corrupt JSON line: run completes, stats compute over valid lines", () => {
   const { workDir, runnerPath, historyFile } = setupRunner();
@@ -226,7 +233,7 @@ test("history #6 — corrupt JSON line: run completes, stats compute over valid 
   } finally {
     rmSync(workDir, { recursive: true, force: true });
   }
-});
+}, TIMEOUT);
 
 test("history #7 — insufficient data: drift warning suppressed when count < 5", () => {
   const { workDir, runnerPath, historyFile } = setupRunner();
@@ -251,4 +258,4 @@ test("history #7 — insufficient data: drift warning suppressed when count < 5"
   } finally {
     rmSync(workDir, { recursive: true, force: true });
   }
-});
+}, TIMEOUT);
