@@ -15,6 +15,7 @@ const FILES = [
   "payload/template/steps/01-example.zsh",
   "scripts/smoke-init.zsh",
   "scripts/smoke-add.zsh",
+  "scripts/lib-sync.zsh",
 ];
 
 for (const f of FILES) {
@@ -24,9 +25,10 @@ for (const f of FILES) {
     //   SC2154 (var ref'd but not assigned) — common across sourced files
     //   SC1090/SC1091 (can't follow source) — sourced files at runtime, not parseable
     //   SC2034 (unused) — typeset -ga arrays look "unused" until run.zsh iterates
+    //   SC2296 (expansion can't start with `(`) — zsh ${(@s:.:)x} split flag
     const res = spawnSync(
       "shellcheck",
-      ["--shell=bash", "-e", "SC2154,SC1090,SC1091,SC2034", join(SKILL_ROOT, f)],
+      ["--shell=bash", "-e", "SC2154,SC1090,SC1091,SC2034,SC2296", join(SKILL_ROOT, f)],
       { encoding: "utf8" }
     );
     if (res.status !== 0) {

@@ -13,6 +13,7 @@ emulate -L zsh
 
 SCRIPT_DIR="${0:A:h}"
 PAYLOAD="$(cd "$SCRIPT_DIR/.." && pwd)/payload"
+source "$SCRIPT_DIR/lib-sync.zsh"
 
 install_path="docs/superpowers/smoke-tests"
 topic=""
@@ -65,25 +66,9 @@ if [[ -z "$topic" ]]; then
 fi
 [[ -n "$topic" ]] || { print -u2 "ERROR: topic empty"; exit 2; }
 
-mkdir -p "$abs_install/lib"
-
-# Copy lib files
-cp "$PAYLOAD/lib/env.zsh"     "$abs_install/lib/"
-cp "$PAYLOAD/lib/log.zsh"     "$abs_install/lib/"
-cp "$PAYLOAD/lib/control.zsh" "$abs_install/lib/"
-cp "$PAYLOAD/lib/term-a.zsh"  "$abs_install/lib/"
-cp "$PAYLOAD/lib/pause.zsh"   "$abs_install/lib/"
-cp "$PAYLOAD/lib/history.zsh" "$abs_install/lib/"
-cp "$PAYLOAD/lib/README.md"   "$abs_install/lib/"
-cp "$PAYLOAD/AUTHORING_GUIDE.md" "$abs_install/"
-
-# Skill version stamp
+# Install shared lib + AUTHORING_GUIDE.md + version stamp (shared with smoke-add).
 plugin_json="$SCRIPT_DIR/../.claude-plugin/plugin.json"
-if [[ -f "$plugin_json" ]] && command -v jq >/dev/null 2>&1; then
-  jq -r .version "$plugin_json" > "$abs_install/lib/.skill-version"
-else
-  print -- "0.0.1" > "$abs_install/lib/.skill-version"
-fi
+sync_lib "$PAYLOAD" "$abs_install" "$(skill_version "$plugin_json")"
 
 # .smokerc generation
 if $non_interactive; then

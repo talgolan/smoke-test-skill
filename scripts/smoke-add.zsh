@@ -20,6 +20,7 @@ emulate -L zsh
 
 SCRIPT_DIR="${0:A:h}"
 PAYLOAD="$(cd "$SCRIPT_DIR/.." && pwd)/payload"
+source "$SCRIPT_DIR/lib-sync.zsh"
 
 install_path=""
 topic=""
@@ -77,6 +78,21 @@ else
   if [[ -z "$abs_install" ]]; then
     print -u2 "ERROR: no .smokerc found from $PWD upward${halted_at:+ (stopped at $halted_at)}; run /smoke-init first, or pass --install-path <path>"
     exit 2
+  fi
+fi
+
+# Version-gated lib sync: a newer run.zsh (copied below) may source a helper
+# the installed lib lacks. Re-copy the shared lib when it's behind the skill.
+# Skipped under --from-init (init just synced at the current version).
+if ! $from_init; then
+  plugin_json="$SCRIPT_DIR/../.claude-plugin/plugin.json"
+  current=$(skill_version "$plugin_json")
+  installed=$(cat "$abs_install/lib/.skill-version" 2>/dev/null || echo 0.0.0)
+  if version_lt "$installed" "$current"; then
+    sync_lib "$PAYLOAD" "$abs_install" "$current"
+    print -- "  synced shared lib $installed → $current"
+  elif version_lt "$current" "$installed"; then
+    print -u2 "  note: installed lib ($installed) newer than skill ($current); leaving as-is"
   fi
 fi
 
