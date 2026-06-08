@@ -162,11 +162,11 @@ No external services, no credentials, no costs.
 **Current `git log --oneline -5` (HEAD, pre-this-commit per LEARNINGS #3):**
 
 ```
+bbad99a feat: version-gated lib sync in smoke-add (#21) (#5)
 21f7117 docs(spec): version-gated lib sync in smoke-add (#21)
 a033baf docs(primer): sync HEAD log block to post-#4 main (v0.4.0)
 501fea8 feat: evidence-preservation + dual-signal polling (v0.4.0) (#4)
 a20f7a1 feat: topic-helper auto-wiring + interactive-SUT primitives (v0.3.0) (#3)
-bf90123 docs: update session continuity
 ```
 
 Regenerate this block whenever you commit — see "Primer maintenance"
@@ -174,13 +174,19 @@ below.
 
 ## Outstanding items (explicitly deferred — not bugs, decisions)
 
-1. **Flaky `history #3`/`#4` (5005ms timeouts).** Both call
-   `setupRunner({ sleepSeconds: 3 })` — a real runner step sleeps 3s; with
-   tmux + scaffold + history overhead the wall time brushes the 5000ms bun
-   default test timeout, so they intermittently fail (confirmed pre-existing —
-   fail on baseline before #21 too). Fix candidates: raise per-test timeout
-   (`test(..., { timeout: 15000 })`), or drop `sleepSeconds` to 1–2s and adjust
-   the outlier/drift assertions accordingly. NOT a lib-sync regression. Own PR.
+_None at HEAD._
+
+1. ~~**Flaky `history #3`/`#4` (5005ms timeouts).**~~ Closed 2026-06-08 (PR
+   #6). Genuine borderline timeout: the history step just `sleep`s (no tmux),
+   and a 4.4s test under `bun test` parallel CPU load brushed the 5000ms
+   default per-test timeout. Fix = `const TIMEOUT = 30_000` passed as the 3rd
+   arg to all 8 subprocess tests in `tests/history.test.ts`. Verified 3× clean
+   in-sandbox + 2× clean out-of-sandbox. NOTE: a parallel investigation of
+   `term_a_answer` (also failing ~5005ms) found it was a **sandbox artifact**,
+   not a flake — the Bash-tool seatbelt blocks tmux's unix socket
+   (`Operation not permitted`); it passes in 2.95s outside the sandbox. No
+   change needed there. Lesson: reproduce a Bash-sandbox failure OUTSIDE the
+   sandbox before treating it as a code/test bug.
 
 Previous outstanding #1 (walk-up boundary UX gap) resolved — see "Current state".
 
