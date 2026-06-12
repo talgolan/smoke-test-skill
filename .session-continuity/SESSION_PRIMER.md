@@ -96,6 +96,16 @@ No external services, no credentials, no costs.
 
 ## Current state
 
+- **v0.7.1 — README manual-run section (doc-only) on `docs/10-readme-manual-sections`.**
+  README "What problem it solves" gained #6 "Sections that need a human, or that
+  touch real state" — surfaces `MANUAL_SECTIONS` + the two manual kinds
+  (operator-paused via `pause` vs auto-driven real-daemon, with `cap` +
+  assert-post-condition), pointing at AUTHORING_GUIDE §14–§15. Section-lifecycle
+  prose now documents `./run.zsh NN` / `--all` / `--list [manual]`. The deep
+  authoring detail shipped in v0.6.0 (§14/§15) but the public README still
+  implied every section runs unattended in one pass — gap closed. All run.zsh
+  flag claims verified against the template. `plugin.json` 0.7.0→0.7.1. Doc-only,
+  no test/payload change; 67/0, tsc clean.
 - **v0.7.0 — `/smoke-sync` command + lib-sync extraction on `feat/9-smoke-sync`.**
   The shared-lib version-gated sync was wired ONLY into `smoke-add`, which
   hard-requires `--topic` — so pulling a lib fix (e.g. itb wanting v0.6.0's
@@ -200,11 +210,11 @@ No external services, no credentials, no costs.
 **Current `git log --oneline -5` (HEAD, pre-this-commit per LEARNINGS #3):**
 
 ```
+4261a6b Merge feat/9-smoke-sync (v0.7.0)
+4bbeb22 feat: /smoke-sync command — refresh shared lib without a runner (v0.7.0)
 86bbeaa Merge chore/8-readme-reconcile
 7624444 docs: reconcile README + SKILL.md with shipped lib surface
 b2935fa Merge feat/7-daemon-manual-smoke-learnings (v0.6.0)
-b153fb9 feat: daemon/manual-smoke section authoring + cap helper (v0.6.0)
-bbda532 test: raise history.test.ts per-test timeout to fix flake (#6)
 ```
 
 Regenerate this block whenever you commit — see "Primer maintenance"

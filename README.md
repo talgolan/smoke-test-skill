@@ -58,6 +58,15 @@ The grep gate at the bottom of the guide catches these mechanically before commi
 
 `.smokerc` declares everything project-specific: `SUT_BIN`, `SUT_REPO`, `BUILD_CMD`, optional `PREFLIGHT_TOOLS`, optional hooks (`pre_run`, `post_run`, `reset_cmd`). The `lib/` and step files reference only those abstractions. The same harness drives a Bun-built CLI, a Rust binary, a Go server, or anything else — the framework doesn't care.
 
+### 6. Sections that need a human, or that touch real state
+
+Most sections run unattended in the no-arg `./run.zsh` pass. Some can't — and the framework handles both via `MANUAL_SECTIONS` (a section listed there is excluded from the no-arg run and invoked deliberately with `./run.zsh NN` or `./run.zsh --all`). There are two distinct kinds, authored differently:
+
+- **Operator-paused** — a step a human must perform or eyeball: a GUI action (VS Code Remote-SSH connect), a physical device, a daemon whose control is GUI-only. `pause "<headline>" "<body>"` blocks the run, reads `/dev/tty`, and returns confirm/fail/skip. The operator acts; the script continues.
+- **Auto-driven manual** — fully scripted, no keystrokes, but kept out of the no-arg run because it **mutates shared machine state**: stops and restarts a real daemon (Docker, Apple `container`, a launchd/systemd unit), removes a real image, rebuilds from cold. It self-skips when its precondition (right OS/backend, CLI present) is absent, caps every hang-prone control call (`cap`), asserts the post-condition rather than the launcher's exit code, and restores state at the end.
+
+The rule of thumb — prefer auto-driven whenever the action is CLI-scriptable; reserve operator-paused for steps no CLI can perform. Full authoring detail (the daemon-control shape, the manual taxonomy, the `cap` helper, the assert-post-condition rule) is in `AUTHORING_GUIDE.md` §14–§15.
+
 ---
 
 ## How it works
@@ -108,6 +117,8 @@ Each section is a step file `steps/NN-<slug>.zsh`. The controller, for each sect
 5. Records duration + result (`PASS` / `FAIL (rc=N)` / `TIMEOUT (>Ns)` / `FAIL-missing`).
 
 After all sections, summary table → optional `post_run` hook → exit follows section results (post_run is warn-only).
+
+`./run.zsh` with no args runs every section except those in `MANUAL_SECTIONS`. `./run.zsh NN` runs one section (manual or not); `./run.zsh --all` includes the manual ones. `./run.zsh --list` shows every section with a `[manual]` tag where it applies. See "Sections that need a human, or that touch real state" above.
 
 ### Configuration
 
