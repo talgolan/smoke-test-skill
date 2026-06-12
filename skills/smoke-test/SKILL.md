@@ -1,11 +1,11 @@
 ---
 name: smoke-test
-description: Scaffold an executable smoke-test framework into a project. Use when the user says "set up smoke testing", "add smoke testing", "add smoke test for X", or asks to install/run smoke tests in a fresh project. Two commands: /smoke-init bootstraps the framework + first runner; /smoke-add adds additional runners.
+description: Scaffold an executable smoke-test framework into a project. Use when the user says "set up smoke testing", "add smoke testing", "add smoke test for X", or asks to install/run smoke tests in a fresh project. Three commands: /smoke-init bootstraps the framework + first runner; /smoke-add adds additional runners; /smoke-sync refreshes the shared lib after a skill update.
 ---
 
 # smoke-test skill
 
-Provides two slash commands that scaffold an executable end-to-end smoke-test harness into a target project. The harness is generic — any binary SUT, any project layout — driven by a per-project `.smokerc`.
+Provides three slash commands that scaffold and maintain an executable end-to-end smoke-test harness in a target project. The harness is generic — any binary SUT, any project layout — driven by a per-project `.smokerc`.
 
 ## When to invoke
 
@@ -13,6 +13,7 @@ Provides two slash commands that scaffold an executable end-to-end smoke-test ha
 |---|---|
 | "set up smoke testing", "add smoke testing", "I want smoke tests" | `/smoke-init` |
 | "add a smoke test for X", "new smoke runner", "scaffold a runner for X" | `/smoke-add X` |
+| "the skill updated, refresh the lib", "pull the new helpers/rules", "sync the smoke lib" | `/smoke-sync` |
 | "smoke run failed, what's wrong" | Read `<install-path>/<topic>/logs/run-<latest>.log` directly. Don't reinvoke. |
 | "how do I write a smoke step" | Open `<install-path>/AUTHORING_GUIDE.md`. |
 
@@ -38,7 +39,11 @@ Args (all optional except interactive prompts will fill the gaps):
 
 ### `/smoke-add <topic>`
 
-Walks up from `$PWD` to find `.smokerc`, then scaffolds `<install-path>/<topic>/` with `run.zsh`, `steps/01-example.zsh`, `README.md`, and a `lib/<topic>-helpers.zsh` stub (auto-sourced by `run.zsh` in both scopes). Refuses if `<topic>` dir exists.
+Walks up from `$PWD` to find `.smokerc`, then scaffolds `<install-path>/<topic>/` with `run.zsh`, `steps/01-example.zsh`, `README.md`, and a `lib/<topic>-helpers.zsh` stub (auto-sourced by `run.zsh` in both scopes). Refuses if `<topic>` dir exists. Version-gate-syncs the shared lib first if it's behind the skill.
+
+### `/smoke-sync`
+
+Refreshes ONLY the shared `lib/` + `AUTHORING_GUIDE.md` in an existing install — no new runner. Same discovery as `/smoke-add` (`--install-path <path>` to override). Version-gated: re-copies only when `lib/.skill-version` is behind the skill, never downgrades. Use after a skill update to pull new helpers/rules into a target repo's committed framework.
 
 ## Hard rules (every session)
 
@@ -86,3 +91,5 @@ Walks up from `$PWD` to find `.smokerc`, then scaffolds `<install-path>/<topic>/
 `/smoke-init` invokes the script at `${CLAUDE_PLUGIN_ROOT}/scripts/smoke-init.zsh`. (Phase 6 verifies this is the canonical plugin-root env-var name.)
 
 `/smoke-add` invokes `${CLAUDE_PLUGIN_ROOT}/scripts/smoke-add.zsh`.
+
+`/smoke-sync` invokes `${CLAUDE_PLUGIN_ROOT}/scripts/smoke-sync.zsh`.

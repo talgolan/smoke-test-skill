@@ -1,0 +1,24 @@
+description = "Refresh the shared smoke-test lib + AUTHORING_GUIDE (no new runner)"
+prompt = """
+Refresh the shared smoke-test lib in an existing install — no new runner.
+Use this after the skill is updated (e.g. a new lib helper or guide rule)
+to pull the changes into a target repo's committed lib/. {{args}} is
+optional:
+  - (empty)                  walk up from $PWD for .smokerc
+  - --install-path <path>    explicit install dir
+
+Try, in order, until one works:
+  1. zsh ${CLAUDE_PLUGIN_ROOT}/scripts/smoke-sync.zsh {{args}}
+  2. zsh scripts/smoke-sync.zsh {{args}}
+
+Discovery when --install-path is omitted:
+  1. Walk up from $PWD looking for .smokerc (halts at .git or $HOME).
+  2. If walk-up halts at .git, probe
+     <git-root>/docs/superpowers/smoke-tests/.smokerc.
+  3. Otherwise refuse with hint to pass --install-path.
+
+Version-gated: re-copies the lib + AUTHORING_GUIDE only when the install's
+lib/.skill-version is behind the skill; never downgrades a newer lib.
+
+After running, report whether a sync happened and the resulting version.
+"""
