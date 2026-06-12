@@ -116,6 +116,48 @@ Not blocking; one-line cp adds are cheap.
 
 ---
 
+## Authoring real-system smoke sections
+
+These are skill-authoring lessons surfaced by the itb `engine-preflight`
+consumer (itb PRs #57 + #58, 2026-06-11) — sections that drive a real
+daemon/system service through the SUT's control path. They're baked into
+`payload/AUTHORING_GUIDE.md` §14/§15 + §8 rules 17/18; recorded here so the
+provenance survives.
+
+### #10 — Assert the post-condition, not the launcher's exit code or output — a launcher can print a cosmetic error on a HEALTHY service (2026-06-11)
+
+**The trap.** itb engine-preflight §08 asserted "start sequence printed NO error" by grepping the pane log for `XPC connection error|internalError`. Apple `container system start` exits 1 with exactly that cosmetic XPC error on EVERY invocation — even a warm, already-running daemon (`container ls` works immediately after). So the assertion false-failed a fully healthy daemon.
+
+**Why.** A `start`/`up`/`enable` command's exit code and stdout are a PROXY; the service's readiness is the invariant. A verification probe inside the launcher can race the service settling, or the launcher can be idempotently noisy. itb itself is unaffected — `preflight.ts:startAndWait` ignores start's rc and polls `container system status` until green.
+
+**Fix.** Removed the no-error assertion (AUTHORING_GUIDE §8 rule 18 + §9 grep check 9). Assert the END STATE instead: poll the readiness check, or wait for the SUT's own ready message (itb prints "No itb containers found" only AFTER its status poll goes green, so that message IS proof). This is the over-correction twin of §8 rule 14 (don't poll success-only) — both reduce to: key on the genuine post-condition. (Originating: itb LEARNINGS #141.)
+
+### #9 — A daemon-control command can HANG; wrap it in a per-command hard cap (`cap`) (2026-06-11)
+
+**The trap.** Apple `container system stop` blocked ~2 min on a sick apiserver during §08 authoring. The per-section `alarm` budget is too coarse — it fails the WHOLE section after minutes, and the runner just looks dead in the meantime.
+
+**Fix.** New `cap <secs> <cmd>...` in `payload/lib/control.zsh` — the per-COMMAND analogue of the per-section budget. Runs the command, kills it at N seconds (TERM then KILL), returns the command's real rc or 124 on timeout (coreutils `timeout` convention). stdout flows through so `OUT=$(cap 10 svc status)` captures. AUTHORING_GUIDE §8 rule 17 + §14 rule 1. `cap` lives in `control.zsh` (already in the lib-sync cp list) precisely to avoid the #1 trap — a new lib FILE would need a `lib-sync.zsh`/`smoke-init.zsh` cp-list edit.
+
+### #8 — The live tmux pane is destroyed when the SUT exits; poll the persistent pane LOG for a just-before-exit signal (2026-06-11)
+
+**The trap.** `term_a_pane_grep` polls the LIVE pane and needs `tmux has-session` true while polling. itb §05 keyed its completion check on it for `itb list`, which prints its result and exits immediately after a successful preflight. The session closed before the poll fired → no match → "list did not complete", while the pane LOG plainly held the success message.
+
+**Fix.** For a signal the SUT prints just before exiting, poll the persistent `logs/<NN>-<slug>-pane.log` (written by `term_a_start`'s `tmux pipe-pane`, survives the session), not the live pane. Dual-signal, keyed on the EXACT message — a loose alternation can match a path/name echo and pass spuriously. AUTHORING_GUIDE §10. Doc-only fix (no new helper): the idiom appears once in §14 and is cheap to inline. (Originating: itb LEARNINGS #140.)
+
+### #7 — Auto-driven manual ≠ operator-paused manual — name the two shapes (2026-06-11)
+
+**The gap.** The skill documented `pause` (operator does a thing) and `MANUAL_SECTIONS` (excluded from no-arg run) but never named the two DISTINCT reasons a section is manual. **(a) Operator-paused** — a human MUST act/eyeball (a GUI step, a `open -a Docker` with no scriptable stop); use `pause`, backend-agnostic. **(b) Auto-driven manual** — fully scripted, no keystrokes, but excluded because it MUTATES shared machine state (stops a daemon, removes an image); self-skips on wrong OS/backend, restores state at the end.
+
+**Rule.** Choose (b) whenever the action is CLI-scriptable — repeatable, fast, no operator attention. Keep a human in the loop only for a step no CLI can perform. AUTHORING_GUIDE §15 (itb §07 = (a), §08 = (b)).
+
+### #6 — An unquoted heredoc that GENERATES a script runs its backticks/`$()` against the operator's real environment AT AUTHOR TIME (2026-06-11)
+
+**The trap.** A hermetic PATH-shim section generated a fake engine CLI with `cat > "$shim" <<SHIM ... SHIM` (UNQUOTED delimiter). A harmless-looking comment in the body — `` # Docker readiness probe: `docker info` `` — was command-substituted at GENERATION time: it ran the operator's real `docker info` and spliced the multi-line output into the shim, producing `syntax error near unexpected token '('` on text that exists nowhere in the source.
+
+**Fix.** Use a QUOTED delimiter (`<<'SHIM'`) so nothing in the body expands — backticks, `$(...)`, `$VAR` all stay literal. Interpolate the few values you need via an explicit header line written before the quoted body (`print -r -- "STATE_FILE='$path'"`). **zsh twin (itb #138):** zsh's `printf` has no `%q` — `printf '...%q...'` errors `illegal format character q` and writes a malformed file; use `print -r --` and single-quote the value yourself, or `${(q)var}`. Both bite anyone authoring a hermetic PATH-shim section. (Originating: itb LEARNINGS #137 + #138.)
+
+---
+
 ## Plugin marketplace publishing
 
 ### #2 — `plugin.json` `author` must be object, not string (2026-05-29)
@@ -216,11 +258,13 @@ public-facing version of this. -->
 
 ---
 
-*Last entry: 2026-05-30 (#4 topic-helper two-scope sourcing, #5 global-SUT-state hermeticity — both surfaced by the itb sf-harness consumer). Add
-new entries at the top of each section as they surface. The
-`/session-continuity:learning` command bumps this line automatically.
-Rule of thumb: if a bug takes more than 15 minutes to diagnose, it
-goes here.*
+*Last entry: 2026-06-11 (#6–#10 — real-system smoke section authoring,
+surfaced by the itb engine-preflight consumer: cosmetic-launcher-error /
+assert-post-condition, per-command `cap`, pane-log race, manual taxonomy,
+unquoted-heredoc shim). Add new entries at the top of each section as they
+surface. The `/session-continuity:learning` command bumps this line
+automatically. Rule of thumb: if a bug takes more than 15 minutes to
+diagnose, it goes here.*
 
 *Numbering note: new entries take the next available number (N+1) and
 are placed at the top of their section. Old entries keep their numbers

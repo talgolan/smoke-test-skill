@@ -69,7 +69,7 @@ Edit source here. The "target project" in test fixtures lives under
 ## Test expectations — these must stay green
 
 ```
-bun test   # 54 pass / 0 fail  (53 pass + 2 flaky history #3/#4 timeouts; see Outstanding #1)
+bun test   # 60 pass / 0 fail  (55 prior + 5 control-cap tests, v0.6.0)
 ```
 
 9 of the 50 tests run `shellcheck` against shipped zsh files. They
@@ -96,6 +96,29 @@ No external services, no credentials, no costs.
 
 ## Current state
 
+- **v0.6.0 — daemon/manual-smoke learnings backport on `feat/7-daemon-manual-smoke-learnings`.**
+  Backports the itb engine-preflight learnings (itb LEARNINGS #137–#141, PRs
+  #57+#58) into the skill. Almost entirely additive docs + ONE new helper.
+  **New `cap <secs> <cmd>...` in `payload/lib/control.zsh`** — hard per-command
+  timeout, the per-COMMAND analogue of run.zsh's per-SECTION `alarm`; returns the
+  command's real rc or 124 on kill (coreutils `timeout` convention), stdout
+  flows through. Lives in `control.zsh` (already in the lib-sync cp list) to
+  avoid the #1 new-lib-FILE trap. **AUTHORING_GUIDE §14** (driving a real
+  daemon/system service: down-path → ladder → real start → poll → restore; 5
+  rules), **§15** (manual taxonomy: operator-paused vs auto-driven; +§3 pointer),
+  **§8 rules 17** (cap hang-prone calls) **+ 18** (assert post-condition not
+  launcher exit/output — the cosmetic-error twin of rule 14), **§9 grep check 9**
+  (flags the rule-18 anti-pattern; verified no false-pos on shipped examples),
+  **§10** (pane-log race — poll the persistent `pipe-pane` log not the live pane
+  for a just-before-exit signal; doc-only, idiom appears once). +5
+  `tests/control-cap.test.ts`. 5 LEARNINGS entries (#6–#10, new section
+  "Authoring real-system smoke sections"). `plugin.json` 0.5.0→0.6.0
+  (package.json carries no version field — only plugin.json, which is what
+  `skill_version` reads; plan's "both in lockstep" was wrong for this repo).
+  Tests 55→60, `bun test` 60/0, tsc clean, shellcheck green. **Follow-up for
+  itb:** re-pull lib via `/smoke-add` so itb's engine-preflight `ep_cap` can
+  retire in favor of the shared `cap`. Plan:
+  `docs/superpowers/plans/2026-06-11-daemon-and-manual-smoke-learnings.md`.
 - **v0.5.0 — lib-sync (itb #21) on `feat/21-lib-sync`.** `/smoke-add` never
   re-copied the shared `lib/` — only `/smoke-init` did. So a newer `run.zsh`
   sourcing a helper the frozen lib lacked (e.g. `control.zsh`, v0.4.0) died at
@@ -162,11 +185,11 @@ No external services, no credentials, no costs.
 **Current `git log --oneline -5` (HEAD, pre-this-commit per LEARNINGS #3):**
 
 ```
+bbda532 test: raise history.test.ts per-test timeout to fix flake (#6)
 bbad99a feat: version-gated lib sync in smoke-add (#21) (#5)
 21f7117 docs(spec): version-gated lib sync in smoke-add (#21)
 a033baf docs(primer): sync HEAD log block to post-#4 main (v0.4.0)
 501fea8 feat: evidence-preservation + dual-signal polling (v0.4.0) (#4)
-a20f7a1 feat: topic-helper auto-wiring + interactive-SUT primitives (v0.3.0) (#3)
 ```
 
 Regenerate this block whenever you commit — see "Primer maintenance"
