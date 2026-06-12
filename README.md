@@ -75,8 +75,10 @@ The grep gate at the bottom of the guide catches these mechanically before commi
 ├── lib/
 │   ├── env.zsh                     # validates .smokerc; provides wait_for_port
 │   ├── log.zsh                     # log/info/warn/err/sect, pass/fail/skip, verify, run
+│   ├── control.zsh                 # poll_until, cap (hard per-command timeout), smoke_keep_on_fail
 │   ├── term-a.zsh                  # tmux pty helpers (term_a_start/wait_port/grep/close)
 │   ├── pause.zsh                   # operator-action prompts (pause / confirm)
+│   ├── history.zsh                 # per-section duration history + adaptive budget/poll
 │   ├── README.md                   # primitives reference
 │   └── .skill-version              # which skill version generated this lib/
 ├── AUTHORING_GUIDE.md              # rule catalog + grep gate
@@ -100,7 +102,7 @@ Each section is a step file `steps/NN-<slug>.zsh`. The controller, for each sect
 
 1. Checks for a `# BUDGET_SECONDS=N` header (else uses `BUDGET_DEFAULT`, default 30).
 2. Spawns a sub-shell wrapped by `perl -e 'alarm(N); exec'`.
-3. Sources `lib/log.zsh`, `lib/env.zsh`, `lib/term-a.zsh`, `lib/pause.zsh`.
+3. Sources `lib/log.zsh`, `lib/env.zsh`, `lib/control.zsh`, `lib/term-a.zsh`, `lib/pause.zsh` (the top-level controller also sources `lib/history.zsh`).
 4. Sources the step file with `SECTION_SLUG` and `SECTION_NUM` exported.
 5. Records duration + result (`PASS` / `FAIL (rc=N)` / `TIMEOUT (>Ns)` / `FAIL-missing`).
 
@@ -285,10 +287,10 @@ Plus whatever your `BUILD_CMD` needs (Bun, Rust, Go, Node, Python, etc.).
 git clone https://github.com/talgolan/smoke-test-skill
 cd smoke-test-skill
 bun install
-bun test          # 23 tests
+bun test          # 60 tests
 ```
 
-Tests cover scaffold scripts (init/add/force/walk-up/token-substitution), runner behavior (binary check, empty config, preflight, budget timeout), hooks (pre_run/post_run), and `shellcheck` cleanliness across all shipped zsh files. A fake SUT (`tests/fixtures/fake-sut.zsh`) lets runner tests execute end-to-end without a real binary or Docker dependency.
+Tests cover scaffold scripts (init/add/force/walk-up/token-substitution/lib-sync), runner behavior (binary check, empty config, preflight, budget timeout), control helpers (`poll_until`, `cap`, evidence preservation), duration history, hooks (pre_run/post_run), and `shellcheck` cleanliness across all shipped zsh files. A fake SUT (`tests/fixtures/fake-sut.zsh`) lets runner tests execute end-to-end without a real binary or Docker dependency.
 
 ---
 
