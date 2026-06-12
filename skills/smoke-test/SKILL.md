@@ -57,6 +57,7 @@ Walks up from `$PWD` to find `.smokerc`, then scaffolds `<install-path>/<topic>/
 ├── lib/                     # shared zsh helpers (don't edit per-runner)
 │   ├── env.zsh
 │   ├── log.zsh
+│   ├── control.zsh          # poll_until, cap, evidence preservation
 │   ├── term-a.zsh
 │   ├── pause.zsh
 │   ├── history.zsh          # duration history + adaptive recommendations
