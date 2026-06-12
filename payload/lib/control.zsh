@@ -71,3 +71,56 @@ keep_on_fail_notice() {
     log "    $handle"
   done
 }
+
+# cap <seconds> <cmd> [args...]
+#
+# Run <cmd> under a hard per-command timeout. Returns the command's real exit
+# code if it finishes within <seconds>, or 124 (the coreutils `timeout`
+# convention) if it had to be killed. stdout/stderr flow through unchanged, so
+# `OUT=$(cap 10 svc status)` captures normally.
+#
+# This is the per-COMMAND analogue of run.zsh's per-SECTION `alarm` budget. Use
+# it for any hang-prone system call — daemon/service control verbs
+# (`start`/`stop`/`status`), network probes, anything that can block on an
+# unhealthy backend. Without it, one wedged call eats the whole section budget
+# and the runner looks dead. Treat a 124 as a failure signal.
+#
+#   cap 25 docker stop "$NAME"            # rc 124 if docker hangs on a sick daemon
+#   OUT=$(cap 10 container system status) # status output captured; 124 if wedged
+#   cap 25 mytool up || fail "up timed out / failed (rc=$?)"
+cap() {
+  emulate -L zsh
+  local secs="$1"; shift
+  (( secs < 1 )) && secs=1
+
+  # A marker file disambiguates "killed by the watchdog" (→ 124) from "the
+  # command itself exited non-zero" — a signal-based rc check can't tell them
+  # apart. Self-cleaning; honors the file's "no external state" contract.
+  local marker
+  marker=$(mktemp 2>/dev/null) || marker="${TMPDIR:-/tmp}/cap.$$"
+
+  "$@" &
+  local cmd_pid=$!
+
+  ( sleep "$secs"
+    if kill -0 "$cmd_pid" 2>/dev/null; then
+      print -n 1 > "$marker"
+      kill -TERM "$cmd_pid" 2>/dev/null
+      sleep 1
+      kill -KILL "$cmd_pid" 2>/dev/null
+    fi ) &
+  local watcher_pid=$!
+
+  wait "$cmd_pid" 2>/dev/null
+  local rc=$?
+
+  kill "$watcher_pid" 2>/dev/null
+  wait "$watcher_pid" 2>/dev/null
+
+  if [[ -s "$marker" ]]; then
+    command rm -f "$marker" 2>/dev/null
+    return 124
+  fi
+  command rm -f "$marker" 2>/dev/null
+  return $rc
+}

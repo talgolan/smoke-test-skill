@@ -38,7 +38,7 @@ File map (after `/smoke-init` and one `/smoke-add` call):
 
 1. Create `<topic>/steps/NN-<slug>.zsh` where `NN` is the next sequential number, two-digit.
 2. Make it executable: `chmod +x <topic>/steps/NN-<slug>.zsh` (optional; `run.zsh` sources it, doesn't exec it).
-3. Append `"NN-<slug>"` to the `ALL_SECTIONS` array in `<topic>/run.zsh`.
+3. Append `"NN-<slug>"` to the `ALL_SECTIONS` array in `<topic>/run.zsh`. If the section mutates shared machine state or needs a human, also add it to `MANUAL_SECTIONS` — see §15 for the two kinds of manual section and how each is authored.
 4. Use `01-example.zsh` as the structural template. Replace the example checks with the real ones.
 5. Run the section in isolation while authoring: `./run.zsh NN`.
 6. Run the grep gate (§9) before committing.
@@ -198,6 +198,10 @@ Each rule has a real failure attached. Provenance in parentheses.
 
 16. **Size the container/service ready-wait against a COLD build, not a warm one.** Readiness timeouts that pass on a warm cache (image already built, deps already installed) silently fail the first time the section runs cold — a from-scratch image build (apt + a runtime toolchain can be ~2 min; slower on some backends) blows past a 120s wait that was tuned on warm runs. Size the ready-wait against the section's `BUDGET_SECONDS` ceiling (e.g. 480s wait under a 600s budget), not the warm-run time. If the build and the ready-wait share a budget, the wait must leave headroom for the assertions that follow. (Originating: an itb §3 ready-wait of 120s passed every warm re-run and failed on the first cold-cache run, where the harness+user image stages alone took longer than the wait.)
 
+17. **Cap every hang-prone system command with `cap <secs> …`.** Daemon/service control verbs (`start`/`stop`/`status`), network probes, and anything that can block on an unhealthy backend must run under `cap` (lib/control.zsh). `cap` returns the command's real rc, or 124 if it had to kill the command at the cap — treat 124 as a failure signal. This is the per-COMMAND analogue of the per-section `alarm` budget: a wedged call otherwise eats the whole section budget and the runner looks hung, failing after minutes instead of seconds. (Originating: an Apple `container system stop` blocked ~2 min on a sick apiserver during itb §08 authoring; the uncapped call wedged the runner.)
+
+18. **Assert the post-condition, not the launcher's exit code or output.** A `start`/`up`/`enable` command can exit non-zero or print a real-looking error and still leave the service fully functional — an idempotency race, or a verification probe that fires before the service settles. NEVER assert "the launcher printed no error": that pathologizes normal output and false-fails a healthy system. Assert the END STATE instead — the readiness check passes, the SUT's real verb works. This is the over-correction twin of rule 14 (don't poll success-only); both reduce to: key on the genuine post-condition, never a proxy. (Originating: itb §08 asserted the absence of an XPC error line that `container system start` prints on EVERY invocation — even a warm, healthy daemon — so the assertion false-failed a working service. itb LEARNINGS #141.)
+
 ---
 
 ## 9. Grep gate (run before committing a step file)
@@ -238,11 +242,16 @@ grep -nE "${topic}-[0-9]+" "$F" | grep -vE "${topic}-${nn}\\b|${topic}-\\\$\\{SE
 #    container path instead.
 grep -nE '(docker|container) exec.*\$HOME' "$F"
 
-# 9. zsh -n syntax check
+# 9. Anti-pattern: asserting NO error in a launcher's output (§8 rule 18). A
+#    start/up/enable can print a cosmetic error on a healthy service — assert the
+#    post-condition instead. Heuristic; confirm each hit by hand.
+grep -nE 'verify .*(no error|printed NO|without error).*grep' "$F"
+
+# 10. zsh -n syntax check
 zsh -n "$F" && echo "syntax OK"
 ```
 
-Hits on 1, 2, 3, 5, 6, 7, or 8 → fix. Hits on 4 → confirm the long sleep is intentional + add a comment explaining why. Check 9 must succeed.
+Hits on 1, 2, 3, 5, 6, 7, or 8 → fix. Hits on 4 → confirm the long sleep is intentional + add a comment explaining why. Hits on 9 → confirm each by hand; it's heuristic (§8 rule 18 — a launcher's cosmetic error must not be forbidden). Check 10 must succeed.
 
 ---
 
@@ -289,6 +298,19 @@ In order of cost:
 2. **Re-run a single section:** `./run.zsh NN`. Iterates faster than the full run.
 3. **Reproduce a failed `verify` manually.** Copy the `cmd` string from `$RUN_LOG` (after `$ `) and paste at your shell prompt. The same `eval` semantics apply.
 4. **Inspect tmux pane logs.** `<topic>/logs/<NN>-<slug>-pane.log` captures the SUT's stdout/stderr inside any `term_a_start`-spawned session, even if the session died fast.
+
+   **For a completion signal a SUT prints just before exiting, grep the persistent pane LOG — not `term_a_pane_grep`.** `term_a_pane_grep` polls the LIVE pane and requires `tmux has-session` to be true while it polls. A SUT that prints its result and exits faster than the poll interval takes its session down before the grep fires, so the match is lost and the section false-fails — even though the output definitely appeared. The persistent `logs/<NN>-<slug>-pane.log` (written by `term_a_start`'s `tmux pipe-pane`) survives the session. Poll the file instead, dual-signal, keyed on the EXACT message (a loose alternation can match a path/name echo and pass spuriously):
+
+   ```zsh
+   pane_log="$SCRIPT_DIR/logs/${SECTION_NUM}-${SECTION_SLUG}-pane.log"
+   for _ in {1..60}; do
+     grep -qF '<exact completion string>' "$pane_log" 2>/dev/null && break
+     grep -qiE '<failure pattern>'         "$pane_log" 2>/dev/null && break
+     sleep 2
+   done
+   ```
+
+   (Originating: an itb §05 keyed its completion check on `term_a_pane_grep` for `itb list`, which exits immediately after a successful preflight; the session closed before the poll and the section reported "list did not complete" while the pane log plainly contained the success message. itb LEARNINGS #140.)
 5. **If a step is genuinely slow,** raise `BUDGET_SECONDS` for that step (top-of-file comment), not globally. Document the reason on the same line.
 6. **Suspect environment, not test:** check `.smokerc` (`cat`); rebuild the SUT (`cd $SUT_REPO && $BUILD_CMD`); verify `PREFLIGHT_TOOLS` are installed (`./run.zsh` prints them on every run).
 
@@ -368,3 +390,78 @@ Some contracts can only be proven against a live, authed external service (a clo
 4. **Prefer a read-only round-trip for the assertion.** Prove auth worked with a cheap GET that makes no permission assumptions and mutates nothing (list limits, whoami, a metadata read) — not a write. The contract is "the SUT can authenticate and reach the service", which a read proves.
 
 Reference implementation: itb's `sf-harness/steps/03-sf-org-auth.zsh` — extracts a live access token on the host, forwards it via `docker exec -e`, logs in inside the container, asserts `connectedStatus == Connected` + a `list limits` round-trip, redacts org-id tokens on any failure dump, and self-skips when no host org is connected.
+
+---
+
+## 14. Driving a real daemon or system service
+
+§13 covers a real *external* service you only AUTHENTICATE against. This section covers a local **daemon or system service the SUT itself controls** — Docker, a launchd/systemd unit, Apple `container`'s apiserver, a database server. The contract under test is the SUT's *control path*: does `mytool up` bring a down daemon to ready, and does `mytool <verb>` fail cleanly when the daemon is down. That means the section STOPS and STARTS a real service on the operator's machine — so it is **always `MANUAL_SECTIONS` + OS/backend-gated + self-skipping** (don't surprise someone mid-work) and it **restores the service to its starting state at the end**. See §15 for which kind of manual section this is.
+
+Shape (down-path → ladder → real start → poll → restore):
+
+```zsh
+# BUDGET_SECONDS=300            # a cold daemon start can take 10–30s+
+set -u
+emulate -L zsh
+
+# Guard: required CLI present + this is the active backend/OS, else SKIP 0.
+command -v <svc-cli> >/dev/null 2>&1 || { skip "§${SECTION_NUM}: <svc> not installed"; exit 0; }
+
+svc_ready() { cap 10 <svc-cli> status >/dev/null 2>&1; }   # cap — a sick daemon hangs
+was_up=false; svc_ready && was_up=true                     # remember, to restore
+
+# Phase 1 — stop, assert the SUT's NON-INTERACTIVE down path is clean.
+cap 25 <svc-cli> stop
+down=false; for _ in {1..15}; do svc_ready || { down=true; break }; sleep 1; done  # wait until DOWN
+$down || { fail "could not stop <svc>"; $was_up && cap 25 <svc-cli> start; exit 1; }
+RUN_OUT=$("$SUT_BIN" <verb> </dev/null 2>&1); rc=$?         # piped stdin ⇒ non-TTY branch
+verify "down: clean exit 1, not a crash"        "[[ $rc -eq 1 ]]"
+verify "down: no stack trace"                   "! print -r -- \"\$RUN_OUT\" | grep -qE 'at .*:[0-9]+|Uncaught'"
+verify "down: names the service + how to start" "print -r -- \"\$RUN_OUT\" | grep -qiE 'not running|<svc> .* start'"
+
+# Phase 2 — interactive ladder drives the REAL start (needs a pty → term-a).
+term_a_start "$SECTION_SLUG" "$SUT_BIN" <verb>
+term_a_answer "$SECTION_SLUG" "[Ss]tart it now" "y" 30 || { fail "no prompt"; term_a_close "$SECTION_SLUG"; $was_up && cap 25 <svc-cli> start; exit 1; }
+
+# Wait on the PERSISTENT pane LOG (not the live pane — §10 race), dual-signal.
+pane_log="$SCRIPT_DIR/logs/${SECTION_NUM}-${SECTION_SLUG}-pane.log"
+done=false
+for _ in {1..60}; do
+  grep -qF '<exact ready message>' "$pane_log" 2>/dev/null && { done=true; break }
+  grep -qiE 'did not become ready|could not' "$pane_log" 2>/dev/null && break
+  sleep 2
+done
+term_a_close "$SECTION_SLUG"
+$done && pass "real <svc> started + <verb> completed" || fail "<svc> did not come ready"
+
+# Restore.
+svc_ready || cap 25 <svc-cli> start
+```
+
+Five rules, each cost a real debugging session in this provenance run:
+
+1. **Cap every daemon-control call with `cap N …`.** `<svc> start`/`stop`/`status` can HANG when the daemon is unhealthy (it blocks on an internal "verifying access" probe). Without a hard cap one wedged call eats the whole section budget and the runner looks dead. `cap` (lib/control.zsh) runs the command, kills it at N seconds, returns 124 on timeout — the per-COMMAND analogue of run.zsh's per-SECTION `alarm`. See §8 rule 17.
+
+2. **The down-path assertion pipes stdin so the SUT takes its NON-interactive branch.** `"$SUT_BIN" <verb> </dev/null` ⇒ `isTTY` false ⇒ the tool prints guidance and exits non-zero WITHOUT prompting. That is the scriptable contract. The interactive ladder (phase 2) needs the opposite — a real pty — which is why it goes through `term_a_start`, never a pipe.
+
+3. **Assert the POST-CONDITION (service responds), never the launcher's exit code or stdout.** A `start`/`up` command may exit non-zero or print a scary-but-cosmetic error while the daemon comes up fine moments later (§8 rule 18). Prove readiness by polling the SUT's own readiness check (`<svc> status` exit 0, or a successful `"$SUT_BIN" <verb>`), not by grepping the launcher's output for the absence of an error. A well-written SUT already polls readiness internally and ignores the launcher's rc — your test should mirror it.
+
+4. **Restore the service to its starting state.** Record `was_up` at entry; on exit, bring the daemon back if you stopped it. A section that leaves the operator's Docker/daemon down is a footgun even when it PASSES.
+
+5. **Self-skip when the backend/OS doesn't match.** Resolve the SUT's actual backend (env → settings file → default) and `skip … ; exit 0` when this section's target service isn't the active one. An Apple-only daemon section must no-op on a Docker machine, not fail.
+
+Reference implementations: itb's `engine-preflight/steps/08-apple-live-autodrive.zsh` (auto-driven, Apple-only — the full cycle unattended) and `07-live-engine-ladder.zsh` (operator-paused, backend-agnostic). See §15 for the difference.
+
+---
+
+## 15. Two kinds of manual section
+
+A `MANUAL_SECTIONS` entry is excluded from the no-arg run — but there are two very different reasons a section is manual, and they're authored differently.
+
+**(a) Operator-paused.** A step a human MUST perform or eyeball — a GUI action (VS Code Remote-SSH connect), a physical device, a judgment call, a daemon whose control is GUI-only (`open -a Docker` has no scriptable "stop"). Use `pause "<headline>" "<body>"` (returns 0/1/2 = confirm/fail/skip, reads `/dev/tty`); the runner blocks until the operator acts. Backend-agnostic — the operator supplies the environment. Example: itb engine-preflight §07 — the operator stops their own engine, the script then drives the recovery.
+
+**(b) Auto-driven manual.** Fully scripted end to end — NO human keystrokes — but excluded from the no-arg run because it MUTATES shared machine state (stops a real daemon, removes a real image, rebuilds from cold). It's "manual" in the run-it-deliberately sense, not the human-in-the-loop sense. It must self-skip when its precondition (right OS/backend, CLI present) is absent, and restore state at the end. Example: itb engine-preflight §08 — stops the real Apple daemon, drives the ladder via `term_a_answer`, polls the pane log, restarts the daemon, all unattended.
+
+Choose (b) over (a) whenever the action is CLI-scriptable: auto-driven sections are repeatable, fast, and don't depend on operator attention. Keep a human in the loop only for a step no CLI can perform — (a) is the fallback for genuinely unscriptable steps, not the default for "this touches real state".
+
+Both still log to `$RUN_LOG` and obey the same budget / keep-on-fail machinery.
