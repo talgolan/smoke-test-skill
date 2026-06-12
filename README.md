@@ -62,10 +62,11 @@ The grep gate at the bottom of the guide catches these mechanically before commi
 
 ## How it works
 
-### Two slash commands
+### Three slash commands
 
 - **`/smoke-init`** — scaffolds the framework into a target project (default install path: `docs/superpowers/smoke-tests/`). Interactive prompts collect `SUT_BIN`, `SUT_REPO`, `BUILD_CMD`. Also creates the first runner.
-- **`/smoke-add <topic>`** — scaffolds an additional runner from the template, in an existing install. Walks up from `$PWD` looking for `.smokerc`; if the walk halts at `.git`, falls back to `<git-root>/docs/superpowers/smoke-tests/.smokerc`. Pass `--install-path <path> <topic>` to bypass discovery for non-default install dirs.
+- **`/smoke-add <topic>`** — scaffolds an additional runner from the template, in an existing install. Walks up from `$PWD` looking for `.smokerc`; if the walk halts at `.git`, falls back to `<git-root>/docs/superpowers/smoke-tests/.smokerc`. Pass `--install-path <path> <topic>` to bypass discovery for non-default install dirs. Also version-gate-syncs the shared lib if it's behind the skill.
+- **`/smoke-sync`** — refreshes ONLY the shared `lib/` + `AUTHORING_GUIDE.md` in an existing install, with no new runner. Use after a skill update to pull new helpers/rules into a target repo's committed framework. Same discovery as `/smoke-add`; version-gated (never downgrades a lib newer than the skill). This is the decoupled form of the sync `/smoke-add` does as a side effect.
 
 ### What lands in the target project
 
@@ -192,7 +193,7 @@ The repo ships a `.claude-plugin/marketplace.json` that registers itself as a si
 /plugin install smoke-test-skill@talgolan
 ```
 
-Slash commands `/smoke-init` and `/smoke-add` are then available.
+Slash commands `/smoke-init`, `/smoke-add`, and `/smoke-sync` are then available.
 
 ### Auto-update
 
@@ -218,7 +219,7 @@ Manual update any time:
 /plugin marketplace update talgolan
 ```
 
-The skill payload (files copied into target projects) is versioned independently of the skill itself. After a skill update, re-run `/smoke-init --force` in a target project to overwrite its `lib/` + `AUTHORING_GUIDE.md` with the new version (sibling backup is created automatically).
+The skill payload (files copied into target projects) is versioned independently of the skill itself. After a skill update, run `/smoke-sync` in a target project to refresh its `lib/` + `AUTHORING_GUIDE.md` to the new version (version-gated; never downgrades). `/smoke-add <topic>` does the same sync as a side effect when it scaffolds a runner. For a full re-scaffold (every payload file, including the example runner), `/smoke-init --force` overwrites with a sibling backup.
 
 ### Local install (development)
 

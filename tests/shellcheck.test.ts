@@ -15,6 +15,7 @@ const FILES = [
   "payload/template/steps/01-example.zsh",
   "scripts/smoke-init.zsh",
   "scripts/smoke-add.zsh",
+  "scripts/smoke-sync.zsh",
   "scripts/lib-sync.zsh",
 ];
 

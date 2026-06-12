@@ -69,7 +69,7 @@ Edit source here. The "target project" in test fixtures lives under
 ## Test expectations — these must stay green
 
 ```
-bun test   # 60 pass / 0 fail  (55 prior + 5 control-cap tests, v0.6.0)
+bun test   # 67 pass / 0 fail  (60 prior + 6 sync + 1 shellcheck file, v0.7.0)
 ```
 
 9 of the 50 tests run `shellcheck` against shipped zsh files. They
@@ -96,6 +96,21 @@ No external services, no credentials, no costs.
 
 ## Current state
 
+- **v0.7.0 — `/smoke-sync` command + lib-sync extraction on `feat/9-smoke-sync`.**
+  The shared-lib version-gated sync was wired ONLY into `smoke-add`, which
+  hard-requires `--topic` — so pulling a lib fix (e.g. itb wanting v0.6.0's
+  `cap`) forced scaffolding an unwanted runner. New **`/smoke-sync`**
+  (`scripts/smoke-sync.zsh` + `commands/smoke-sync.toml`): lib-only,
+  version-gated, no topic. To prevent drift, extracted `resolve_install_dir`
+  (discovery: explicit-path / walk-up / .git-fallback) and `sync_lib_if_behind`
+  (compare + copy + stamp, rc 0/1/2) into `lib-sync.zsh`; `smoke-add` refactored
+  to call both (15 tests unchanged). Why not auto-update on reload: the runner
+  has NO path to the skill payload (it resolves `$SMOKE_LIB` to the committed
+  copy), so a sync must be command-initiated — freezing-by-default is also
+  intended (reproducible CI). +6 `tests/sync.test.ts` + smoke-sync.zsh in the
+  shellcheck FILES list. README "Two→Three slash commands", auto-update note now
+  points at `/smoke-sync`, SKILL.md command surface updated. `plugin.json`
+  0.6.0→0.7.0. Tests 60→67, tsc clean, shellcheck green. LEARNINGS #11.
 - **v0.6.0 — daemon/manual-smoke learnings backport on `feat/7-daemon-manual-smoke-learnings`.**
   Backports the itb engine-preflight learnings (itb LEARNINGS #137–#141, PRs
   #57+#58) into the skill. Almost entirely additive docs + ONE new helper.
@@ -185,11 +200,11 @@ No external services, no credentials, no costs.
 **Current `git log --oneline -5` (HEAD, pre-this-commit per LEARNINGS #3):**
 
 ```
+86bbeaa Merge chore/8-readme-reconcile
+7624444 docs: reconcile README + SKILL.md with shipped lib surface
+b2935fa Merge feat/7-daemon-manual-smoke-learnings (v0.6.0)
+b153fb9 feat: daemon/manual-smoke section authoring + cap helper (v0.6.0)
 bbda532 test: raise history.test.ts per-test timeout to fix flake (#6)
-bbad99a feat: version-gated lib sync in smoke-add (#21) (#5)
-21f7117 docs(spec): version-gated lib sync in smoke-add (#21)
-a033baf docs(primer): sync HEAD log block to post-#4 main (v0.4.0)
-501fea8 feat: evidence-preservation + dual-signal polling (v0.4.0) (#4)
 ```
 
 Regenerate this block whenever you commit — see "Primer maintenance"

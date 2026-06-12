@@ -56,7 +56,17 @@ yet in `git log` at authoring time. There's a chicken-and-egg loop.
 
 ---
 
-## Scaffolder logic (smoke-init / smoke-add)
+## Scaffolder logic (smoke-init / smoke-add / smoke-sync)
+
+### #11 — The shared-lib sync was coupled to `smoke-add`'s --topic, so pulling a lib fix forced scaffolding an unwanted runner (2026-06-12)
+
+**The gap.** The version-gated `sync_lib` (the #21/v0.5.0 mechanism) was wired ONLY into `smoke-add`, which hard-requires `--topic` (`exit 2` without it). So a consumer who just wanted the latest shared `lib/` + `AUTHORING_GUIDE.md` (e.g. itb after the skill shipped v0.6.0's `cap` helper) had to create a runner they didn't want, or run the heavyweight `/smoke-init --force` (re-scaffolds everything). Two unrelated concerns — "sync the shared lib" and "create a runner" — were fused.
+
+**Why it can't auto-update instead.** The installed lib is committed into the consumer repo; the only thing that runs there (`run.zsh`) resolves `$SMOKE_LIB` to that committed copy and has NO path to the skill payload (which lives in `~/.claude/plugins/cache/.../<ver>/payload/`, reachable only from the Claude Code command context). A skill has no runtime presence in the consumer repo — no daemon, no hook — so "refresh on plugin reload" is structurally impossible. The sync MUST be initiated by a slash command. Freezing-by-default is also intentional (reproducible CI, no mid-PR behavior drift).
+
+**Fix.** New `/smoke-sync` command (`scripts/smoke-sync.zsh` + `commands/smoke-sync.toml`): lib-only, version-gated, no `--topic`. To avoid drift between it and `smoke-add`, extracted the two shared blocks into `lib-sync.zsh` — `resolve_install_dir <path>` (the explicit-path / walk-up / .git-fallback discovery) and `sync_lib_if_behind <payload> <install> <plugin_json>` (the version compare + copy + stamp, rc 0/1/2 = synced/current/newer). `smoke-add` now calls both (behavior unchanged — its 15 tests stayed green); `smoke-sync` is a thin wrapper. This honors lib-sync.zsh's own charter ("the install block lives in exactly one place and the two paths cannot drift") — generalize the mechanism, don't add a third copy. +6 sync tests + 1 shellcheck file. v0.7.0.
+
+### #5 — Per-`pdir` isolation does not cover GLOBAL SUT state (docker images, global installs, daemons) — surfaced by an itb consumer (2026-05-30)
 
 ### #5 — Per-`pdir` isolation does not cover GLOBAL SUT state (docker images, global installs, daemons) — surfaced by an itb consumer (2026-05-30)
 
@@ -258,10 +268,9 @@ public-facing version of this. -->
 
 ---
 
-*Last entry: 2026-06-11 (#6–#10 — real-system smoke section authoring,
-surfaced by the itb engine-preflight consumer: cosmetic-launcher-error /
-assert-post-condition, per-command `cap`, pane-log race, manual taxonomy,
-unquoted-heredoc shim). Add new entries at the top of each section as they
+*Last entry: 2026-06-12 (#11 — shared-lib sync was coupled to smoke-add's
+--topic; added /smoke-sync + extracted resolve_install_dir/sync_lib_if_behind
+into lib-sync.zsh). Add new entries at the top of each section as they
 surface. The `/session-continuity:learning` command bumps this line
 automatically. Rule of thumb: if a bug takes more than 15 minutes to
 diagnose, it goes here.*
