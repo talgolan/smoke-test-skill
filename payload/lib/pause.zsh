@@ -18,13 +18,23 @@ pause() {
   print -r -- "------------------------------------"
   local reply
   # Read from /dev/tty so the prompt works even when run.zsh's stdin is
-  # piped (e.g. CI / `tee` upstream).
+  # piped (e.g. CI / `tee` upstream). If there is NO controlling tty (run via
+  # a no-tty harness, cron, or `claude`'s inline bash), there is no operator to
+  # confirm — FAIL rather than silently passing. A manual section that cannot
+  # reach a human must never report PASS.
+  if [[ ! -r /dev/tty || ! -c /dev/tty ]]; then
+    fail "$headline (no controlling tty — cannot prompt operator; run in a real terminal)"
+    return 1
+  fi
   print -n -- "> "
-  read -r reply </dev/tty
+  if ! read -r reply </dev/tty; then
+    fail "$headline (could not read operator reply from /dev/tty)"
+    return 1
+  fi
   case "$reply" in
     skip|SKIP) skip "$headline (operator skipped)"; return 2 ;;
     fail|FAIL) fail "$headline (operator marked fail)"; return 1 ;;
-    *) pass "$headline (operator confirmed)"; return 0 ;;
+    *) pass "$headline (operator confirmed)"; return 0 ;;  # bare Enter = confirm (documented)
   esac
 }
 
@@ -34,7 +44,10 @@ confirm() {
   local q="$1" reply
   print -r -- "" | tee -a "$RUN_LOG" >/dev/null
   print -r -- "  $q [y/N] " | tee -a "$RUN_LOG"
-  read -r reply </dev/tty
+  # No tty → cannot ask → treat as "no" (the safe default for a [y/N] gate).
+  if [[ ! -r /dev/tty || ! -c /dev/tty ]] || ! read -r reply </dev/tty; then
+    log "  operator: no (no controlling tty)"; return 1
+  fi
   case "$reply" in
     y|Y|yes|YES) log "  operator: yes"; return 0 ;;
     *)            log "  operator: no";  return 1 ;;
