@@ -180,7 +180,7 @@ Each rule has a real failure attached. Provenance in parentheses.
 
 1. **Absolute paths everywhere.** Sub-shells drop cwd. (Originating: a smoke runner ran fine standalone but broke under `pbpaste | bash` in a paste-and-run smoke; the cd never persisted.)
 2. **Use `RUN_OUT` not `out`.** `verify` declares `local out`; it shadows your `out` during `eval`. (Originating: a §6 conflict-detection check returned PASS even when `RUN_OUT=""` because `out` was empty.)
-3. **`verify` for gates, `run` for info.** `verify` increments fail counters and decides exit code; `run` just logs. Don't use `run` for assertions — failures get silently swallowed.
+3. **`verify` for gates, `run` for info.** `verify` increments `FAIL_COUNT` (and prints PASS/FAIL); `run` just logs. Don't use `run` for assertions — failures get silently swallowed. **`verify` does NOT set the step's exit code** — it only bumps the counter. A step that ends with a bare `exit 0` therefore reports PASS to `run.zsh` even after a `verify` FAILed. You MUST end the step with the FAIL_COUNT-exit tail (rule 19). (This is a common, dangerous miswrite — the gate lies on verify-only failures.)
 4. **Hooks are optional.** Runners MUST work if `.smokerc` doesn't define `pre_run`, `post_run`, or `reset_cmd`. The runner uses `typeset -f` to test; never `set -u`-explode on missing hooks.
 5. **Stash outside `pdir`.** If you stash anything, the stash dir lives at `$pdir.stash` (sibling), not `$pdir/stash` (child). Otherwise `rm -rf $pdir` in Teardown destroys the stash. (Originating: a smoke run destroyed the operator's real `~/.claude/plugins/` because the stash was a child of pdir.)
 6. **Never blanket-delete shared host state.** If a section writes into `~/.<anything-the-user-also-uses>` (e.g., `~/.ssh/known_hosts`, `~/.config/foo`), stash + restore in Teardown. Don't `rm -rf ~/.config/foo` outright.
@@ -201,6 +201,12 @@ Each rule has a real failure attached. Provenance in parentheses.
 17. **Cap every hang-prone system command with `cap <secs> …`.** Daemon/service control verbs (`start`/`stop`/`status`), network probes, and anything that can block on an unhealthy backend must run under `cap` (lib/control.zsh). `cap` returns the command's real rc, or 124 if it had to kill the command at the cap — treat 124 as a failure signal. This is the per-COMMAND analogue of the per-section `alarm` budget: a wedged call otherwise eats the whole section budget and the runner looks hung, failing after minutes instead of seconds. (Originating: an Apple `container system stop` blocked ~2 min on a sick apiserver during itb §08 authoring; the uncapped call wedged the runner.)
 
 18. **Assert the post-condition, not the launcher's exit code or output.** A `start`/`up`/`enable` command can exit non-zero or print a real-looking error and still leave the service fully functional — an idempotency race, or a verification probe that fires before the service settles. NEVER assert "the launcher printed no error": that pathologizes normal output and false-fails a healthy system. Assert the END STATE instead — the readiness check passes, the SUT's real verb works. This is the over-correction twin of rule 14 (don't poll success-only); both reduce to: key on the genuine post-condition, never a proxy. (Originating: itb §08 asserted the absence of an XPC error line that `container system start` prints on EVERY invocation — even a warm, healthy daemon — so the assertion false-failed a working service. itb LEARNINGS #141.)
+
+19. **End every step with the FAIL_COUNT-exit tail — a bare `exit 0` makes the gate LIE.** `run.zsh` decides a section's PASS/FAIL from the step's EXIT CODE, but `verify` only increments `FAIL_COUNT` (rule 3) — it does not touch the exit code. So a step that does its assertions and then ends `exit 0` reports PASS even when a `verify` FAILed. The last line of every step that runs any `verify` MUST be:
+    ```zsh
+    (( FAIL_COUNT > 0 )) && exit 1 || exit 0
+    ```
+    Early `exit 1` on a hard prerequisite failure (setup couldn't build, daemon down) is fine and independent — this rule is about the FINAL line after the assertion block. A step whose only failures are `verify` failures and which ends bare `exit 0` is the single most dangerous miswrite: it converts a real regression into a green check. (Originating: an itb build-egress runner ended all four steps `exit 0`; §03 logged a `verify` FAIL yet the section reported PASS — the gate silently swallowed it. The bug was only caught because a human re-read the per-assertion lines, not the section verdict.)
 
 ---
 
@@ -249,6 +255,14 @@ grep -nE 'verify .*(no error|printed NO|without error).*grep' "$F"
 
 # 10. zsh -n syntax check
 zsh -n "$F" && echo "syntax OK"
+
+# 11. Step runs verify() but never propagates FAIL_COUNT to the exit code
+#     (§8 rule 19). A bare final `exit 0` makes the section report PASS even
+#     after a verify FAILed — the gate lies. Flag any step that calls verify
+#     but has no `FAIL_COUNT` guard anywhere.
+if grep -qE '^\s*verify ' "$F" && ! grep -qE 'FAIL_COUNT' "$F"; then
+  echo "FAIL: $F runs verify but never checks FAIL_COUNT — add the rule-19 exit tail"
+fi
 ```
 
 Hits on 1, 2, 3, 5, 6, 7, or 8 → fix. Hits on 4 → confirm the long sleep is intentional + add a comment explaining why. Hits on 9 → confirm each by hand; it's heuristic (§8 rule 18 — a launcher's cosmetic error must not be forbidden). Check 10 must succeed.
