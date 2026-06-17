@@ -1,4 +1,4 @@
-# smoke-test-skill
+# smoke-test-plugin
 
 A standalone Claude Code plugin that scaffolds an executable, opinionated smoke-test framework into any project.
 
@@ -193,15 +193,16 @@ If the runner walked all the way to `/`, it would happily pick up an unrelated p
 
 ## Install
 
-Repo: <https://github.com/talgolan/smoke-test-skill>.
+Repo: <https://github.com/talgolan/smoke-test-plugin>. Published via the
+[`talgolan/claude-plugins`](https://github.com/talgolan/claude-plugins) marketplace.
 
 ### Install from GitHub (recommended)
 
-The repo ships a `.claude-plugin/marketplace.json` that registers itself as a single-plugin marketplace. In Claude Code:
+In Claude Code:
 
 ```
-/plugin marketplace add talgolan/smoke-test-skill
-/plugin install smoke-test-skill@talgolan
+/plugin marketplace add talgolan/claude-plugins
+/plugin install smoke-test-plugin@talgolan
 ```
 
 Slash commands `/smoke-init`, `/smoke-add`, and `/smoke-sync` are then available.
@@ -217,7 +218,7 @@ Third-party marketplaces default to **manual update**. Two ways to flip it on:
    {
      "extraKnownMarketplaces": {
        "talgolan": {
-         "source": { "source": "github", "repo": "talgolan/smoke-test-skill" },
+         "source": { "source": "github", "repo": "talgolan/claude-plugins" },
          "autoUpdate": true
        }
      }
@@ -237,8 +238,8 @@ The skill payload (files copied into target projects) is versioned independently
 Clone and start Claude Code with `--plugin-dir`:
 
 ```bash
-git clone https://github.com/talgolan/smoke-test-skill ~/active_development/smoke-test-skill
-claude --plugin-dir ~/active_development/smoke-test-skill
+git clone https://github.com/talgolan/smoke-test-plugin ~/active_development/smoke-test-plugin
+claude --plugin-dir ~/active_development/smoke-test-plugin
 ```
 
 After editing files in the clone, run `/reload-plugins` inside Claude Code to pick up changes without restarting.
@@ -296,8 +297,8 @@ Plus whatever your `BUILD_CMD` needs (Bun, Rust, Go, Node, Python, etc.).
 ## Develop
 
 ```bash
-git clone https://github.com/talgolan/smoke-test-skill
-cd smoke-test-skill
+git clone https://github.com/talgolan/smoke-test-plugin
+cd smoke-test-plugin
 bun install
 bun test          # 60 tests
 ```

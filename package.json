@@ -1,5 +1,5 @@
 {
-  "name": "smoke-test-skill",
+  "name": "smoke-test-plugin",
   "module": "index.ts",
   "type": "module",
   "private": true,

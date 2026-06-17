@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "smoke-test-skill",
+      "name": "smoke-test-plugin",
       "devDependencies": {
         "@types/bun": "latest",
       },
