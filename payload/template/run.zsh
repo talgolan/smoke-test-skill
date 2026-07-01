@@ -73,6 +73,20 @@ fi
 RUN_LOG="$SCRIPT_DIR/logs/run-$(date +%Y%m%d-%H%M%S).log"
 export RUN_LOG SCRIPT_DIR SMOKE_LIB INSTALL_DIR
 
+# Smoke-run-active sentinel (smoke-mutation gate). While this file exists, a
+# smoke run OWNS the containers + host-helpers; the PreToolUse Bash hook
+# (.claude/hooks/smoke-active-gate.sh) blocks any `container exec`/`docker
+# exec`/`kill`/`pkill`/`rm` so an agent cannot contaminate a live run by
+# "diagnosing" it. The path MUST match the hook — both default to
+# $HOME/.smoke-run-active; override both via SMOKE_SENTINEL_FILE (itb sets it to
+# $HOME/.itb/.smoke-run-active in .smokerc). Host-fixed path (NOT $ITB_HOME etc.)
+# because the hook runs on the host with no knowledge of any per-run home
+# override. The EXIT trap removes it on EVERY exit path — normal, abort, ^C.
+SMOKE_SENTINEL="${SMOKE_SENTINEL_FILE:-$HOME/.smoke-run-active}"
+mkdir -p "$(dirname "$SMOKE_SENTINEL")" 2>/dev/null || true
+print -r -- "pid=$$ started=$(date +%s) runner=$SCRIPT_DIR" > "$SMOKE_SENTINEL"
+trap 'rm -f "$SMOKE_SENTINEL" 2>/dev/null' EXIT INT TERM
+
 source "$SMOKE_LIB/log.zsh"
 source "$SMOKE_LIB/env.zsh"
 source "$SMOKE_LIB/control.zsh"

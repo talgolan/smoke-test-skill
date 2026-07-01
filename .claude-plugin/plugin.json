@@ -1,7 +1,7 @@
 {
   "name": "smoke-test-plugin",
-  "version": "0.7.3",
-  "description": "Scaffold an executable smoke-test framework into any project. Two slash commands: /smoke-init scaffolds the framework + first runner; /smoke-add scaffolds additional runners.",
+  "version": "0.8.0",
+  "description": "Scaffold an executable smoke-test framework into any project. Three slash commands: /smoke-init scaffolds the framework + first runner; /smoke-add scaffolds additional runners; /smoke-sync refreshes the shared lib.",
   "author": {
     "name": "Tal Golan"
   }

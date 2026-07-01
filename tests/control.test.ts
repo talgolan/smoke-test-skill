@@ -46,22 +46,32 @@ test("poll_until with empty failure-cmd polls success only", () => {
   expect(r.stdout).toContain("rc=0");
 });
 
-test("smoke_keep_on_fail false when SMOKE_KEEP_ON_FAIL unset (even with failures)", () => {
+// Preserve-on-failure is the DEFAULT (flipped from opt-in). The 5-case truth
+// table: fail+unset=keep, pass+unset=teardown, fail+0=teardown, fail+1=keep,
+// pass+1=teardown.
+test("smoke_keep_on_fail KEEP by default when a failure was recorded (unset)", () => {
   const r = runControl(
     `FAIL_COUNT=3; smoke_keep_on_fail && echo KEEP || echo TEARDOWN`
   );
-  expect(r.stdout).toContain("TEARDOWN");
+  expect(r.stdout).toContain("KEEP");
 });
 
-test("smoke_keep_on_fail false when set but no failures", () => {
+test("smoke_keep_on_fail TEARDOWN when no failures (unset)", () => {
   const r = runControl(
-    `FAIL_COUNT=0; smoke_keep_on_fail && echo KEEP || echo TEARDOWN`,
-    { SMOKE_KEEP_ON_FAIL: "1" }
+    `FAIL_COUNT=0; smoke_keep_on_fail && echo KEEP || echo TEARDOWN`
   );
   expect(r.stdout).toContain("TEARDOWN");
 });
 
-test("smoke_keep_on_fail true when set AND a failure was recorded", () => {
+test("smoke_keep_on_fail TEARDOWN when SMOKE_KEEP_ON_FAIL=0 forces it (even with failures)", () => {
+  const r = runControl(
+    `FAIL_COUNT=3; smoke_keep_on_fail && echo KEEP || echo TEARDOWN`,
+    { SMOKE_KEEP_ON_FAIL: "0" }
+  );
+  expect(r.stdout).toContain("TEARDOWN");
+});
+
+test("smoke_keep_on_fail KEEP when SMOKE_KEEP_ON_FAIL=1 AND a failure was recorded", () => {
   const r = runControl(
     `FAIL_COUNT=1; smoke_keep_on_fail && echo KEEP || echo TEARDOWN`,
     { SMOKE_KEEP_ON_FAIL: "1" }
@@ -69,11 +79,18 @@ test("smoke_keep_on_fail true when set AND a failure was recorded", () => {
   expect(r.stdout).toContain("KEEP");
 });
 
-test("smoke_keep_on_fail tolerates unset FAIL_COUNT", () => {
+test("smoke_keep_on_fail TEARDOWN when SMOKE_KEEP_ON_FAIL=1 but no failures", () => {
+  const r = runControl(
+    `FAIL_COUNT=0; smoke_keep_on_fail && echo KEEP || echo TEARDOWN`,
+    { SMOKE_KEEP_ON_FAIL: "1" }
+  );
+  expect(r.stdout).toContain("TEARDOWN");
+});
+
+test("smoke_keep_on_fail tolerates unset FAIL_COUNT under set -u", () => {
   // FAIL_COUNT defaults to 0 via ${FAIL_COUNT:-0} — must not error under set -u.
   const r = runControl(
-    `set -u; smoke_keep_on_fail && echo KEEP || echo TEARDOWN`,
-    { SMOKE_KEEP_ON_FAIL: "1" }
+    `set -u; smoke_keep_on_fail && echo KEEP || echo TEARDOWN`
   );
   expect(r.status).toBe(0);
   expect(r.stdout).toContain("TEARDOWN");

@@ -13,6 +13,7 @@ const FILES = [
   "payload/template/run.zsh",
   "payload/template/lib/topic-helpers.zsh",
   "payload/template/steps/01-example.zsh",
+  "payload/hooks/smoke-active-gate.sh",
   "scripts/smoke-init.zsh",
   "scripts/smoke-add.zsh",
   "scripts/smoke-sync.zsh",

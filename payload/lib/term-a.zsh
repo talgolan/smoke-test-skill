@@ -103,15 +103,63 @@ _term_a_dump_diagnostics() {
 }
 
 # term_a_capture "<slug>" — dump pane content to RUN_LOG (debugging).
+#
+# On a FAST abort (the SUT bailing on a failed precondition before its runtime
+# is ready), the tmux session is already GONE by the time this runs — but the
+# piped pane-log FILE still holds the process's final output, which is exactly
+# the error the caller needs. Live session → capture the pane; session gone →
+# fall back to tailing the same pipe-log file that pipe-pane writes and that
+# _term_a_dump_diagnostics reads, so the real error survives.
 term_a_capture() {
   local slug="$1"
   local session="smoke-$slug"
   if tmux has-session -t "$session" 2>/dev/null; then
     log "  TERM-A pane (session=$session):"
     tmux capture-pane -t "$session" -p 2>/dev/null | sed 's/^/    /' | tee -a "$RUN_LOG" >/dev/null
-  else
-    log "  TERM-A pane: session $session not present"
+    return 0
   fi
+  log "  TERM-A pane: session $session not present (exited) — reading piped pane log"
+  local pipe_log="$SCRIPT_DIR/logs/${SECTION_NUM}-${slug}-pane.log"
+  if [[ -s "$pipe_log" ]]; then
+    log "  TERM-A pane log ($pipe_log, last 40 lines):"
+    tail -40 "$pipe_log" | sed 's/^/    /' | tee -a "$RUN_LOG" >/dev/null
+  else
+    log "  TERM-A pane log: $pipe_log absent or empty — no output captured"
+  fi
+}
+
+# term_a_launch_died "<slug>" — true once the term-A session that launched the
+# SUT is GONE. A foreground launcher (e.g. `itb run`, `docker run -it`) stays
+# alive while the thing it started lives; a vanished session BEFORE readiness
+# means the launch EXITED — usually the SUT aborted on a precondition (an
+# unauthenticated token, a missing dep). Polling the full timeout in that case
+# masks the SUT's own loud error as a "hang".
+term_a_launch_died() {
+  ! tmux has-session -t "smoke-${1}" 2>/dev/null
+}
+
+# term_a_wait_ready "<slug>" <probe-cmd> [timeout] — generic fail-fast readiness
+# wait for a SUT launched in a term-A session. Runs <probe-cmd> (a shell command
+# string, eval'd) each tick; returns 0 the moment it succeeds. If the launching
+# session dies before the probe passes, fail FAST with the pane tail (which
+# carries the SUT's real error via term_a_capture's pipe-log fallback) instead
+# of hanging to the timeout. Returns: 0 ready, 2 launch died early, 1 timeout.
+#
+#   # container readiness — probe answers exec calls:
+#   term_a_wait_ready "$SECTION_SLUG" "docker exec $NAME true" 60
+#   term_a_wait_ready "$SECTION_SLUG" "container exec $NAME true" 60
+term_a_wait_ready() {
+  local slug="$1" probe="$2" timeout="${3:-60}" elapsed=0
+  while (( elapsed < timeout )); do
+    eval "$probe" >/dev/null 2>&1 && return 0
+    if term_a_launch_died "$slug"; then
+      log "  ✗ launch process (session smoke-$slug) exited before ready — the SUT aborted. Last output:"
+      term_a_capture "$slug"
+      return 2
+    fi
+    sleep 2; elapsed=$((elapsed + 2))
+  done
+  return 1
 }
 
 # term_a_pane_grep "<slug>" "<pattern>" [timeout]

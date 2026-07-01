@@ -37,6 +37,79 @@ sync_lib() {
   print -- "$version" > "$abs_install/lib/.skill-version"
 }
 
+# project_root_of <start-dir> — echo the consumer project root: the git root at
+# or above <start-dir>, else <start-dir> itself. The mutation-gate hook + its
+# settings.json entry live under <root>/.claude.
+project_root_of() {
+  local d="$1"
+  while [[ -n "$d" && "$d" != "/" ]]; do
+    [[ -d "$d/.git" ]] && { print -r -- "$d"; return 0; }
+    d="${d:h}"
+  done
+  print -r -- "$1"
+}
+
+# install_mutation_gate_hook <payload> <project_root>
+#
+# Install the smoke-mutation-gate PreToolUse hook into the CONSUMER project so an
+# agent cannot `container/docker exec`, `kill`/`pkill`, or `rm` a LIVE smoke run's
+# containers out from under it. Two parts, both under <project_root>/.claude:
+#   1. copy payload/hooks/smoke-active-gate.sh → .claude/hooks/ (chmod +x)
+#   2. merge a PreToolUse/Bash hook entry into .claude/settings.json — idempotent
+#      (skip if already present) and non-clobbering (append, never replace other
+#      hooks). Requires jq for the merge; without jq, copies the script and prints
+#      the manual settings snippet.
+# The hook goes live only after a `/hooks` reload or a Claude Code restart.
+install_mutation_gate_hook() {
+  local payload="$1" proj="$2"
+  local hooks_dir="$proj/.claude/hooks"
+  local settings="$proj/.claude/settings.json"
+  # $CLAUDE_PROJECT_DIR is a literal placeholder Claude Code expands at hook time
+  # — it must NOT expand here, so single quotes are intentional.
+  # shellcheck disable=SC2016
+  local gatecmd='"$CLAUDE_PROJECT_DIR/.claude/hooks/smoke-active-gate.sh"'
+
+  mkdir -p "$hooks_dir"
+  command cp -f "$payload/hooks/smoke-active-gate.sh" "$hooks_dir/"
+  chmod +x "$hooks_dir/smoke-active-gate.sh"
+
+  if ! command -v jq >/dev/null 2>&1; then
+    print -u2 "  note: jq not found — copied smoke-active-gate.sh but did NOT wire settings.json."
+    print -u2 "  Add this PreToolUse hook to $settings by hand:"
+    print -u2 "    {\"matcher\":\"Bash\",\"hooks\":[{\"type\":\"command\",\"command\":$gatecmd}]}"
+    return 1
+  fi
+
+  local current tmp
+  # Read the existing settings (or {} when absent/empty) into a var so jq
+  # consumes a single well-formed object on stdin — no process substitution.
+  current="$(cat "$settings" 2>/dev/null)"
+  [[ -z "$current" ]] && current='{}'
+  # Guard against an invalid existing settings.json — jq would fail the merge
+  # and we'd silently leave it unwired. Name the cause instead.
+  if ! printf '%s' "$current" | jq empty >/dev/null 2>&1; then
+    print -u2 "  WARNING: $settings is not valid JSON — copied the hook but skipped wiring. Fix the file, then re-run /smoke-sync."
+    return 1
+  fi
+  tmp="$(mktemp)"
+  # Add the entry only if no existing PreToolUse hook already points at
+  # smoke-active-gate.sh (idempotent); append, never replace other hooks.
+  if printf '%s' "$current" | jq --arg gatecmd "$gatecmd" '
+        .hooks //= {}
+        | .hooks.PreToolUse //= []
+        | if any(.hooks.PreToolUse[]?; (.hooks[]?.command // "") | contains("smoke-active-gate.sh"))
+          then .
+          else .hooks.PreToolUse += [{matcher:"Bash", hooks:[{type:"command", command:$gatecmd}]}]
+          end
+      ' > "$tmp" 2>/dev/null && [[ -s "$tmp" ]] && command mv -f "$tmp" "$settings"; then
+    print -- "  wired smoke-mutation gate into .claude/settings.json (reload /hooks or restart to activate)"
+  else
+    rm -f "$tmp"
+    print -u2 "  WARNING: failed to merge settings.json; copied the hook but wiring skipped. Add the PreToolUse/Bash entry by hand."
+    return 1
+  fi
+}
+
 # resolve_install_dir <install_path>   (install_path may be empty)
 #
 # Resolve the install dir (the directory holding .smokerc) the same way both
