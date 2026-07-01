@@ -42,14 +42,17 @@ poll_until() {
   return 1
 }
 
-# smoke_keep_on_fail — true when SMOKE_KEEP_ON_FAIL is set in the environment
-# AND this section has recorded at least one failure. FAIL_COUNT is maintained
-# by log.zsh's `fail`/`verify` and is live inside the per-section sub-shell.
+# smoke_keep_on_fail — true when this section recorded at least one failure,
+# UNLESS the operator explicitly opted out with SMOKE_KEEP_ON_FAIL=0. FAIL_COUNT
+# is maintained by log.zsh's `fail`/`verify` and is live inside the per-section
+# sub-shell.
 #
-# Guard teardown with it so a failed run leaves its diagnostic state intact
-# (live container, isolated $HOME, capture files) for the operator to probe.
-# Sections tear down on EVERY exit by default; without this guard, a failed run
-# destroys its own evidence and each root cause costs another full rebuild.
+# DEFAULT IS PRESERVE-ON-FAILURE. A failed section keeps its diagnostic state
+# (live container, isolated $HOME, capture files) so the root cause can be read
+# from the real artifacts — destroying evidence on failure cost multiple full
+# rebuilds per bug. Set SMOKE_KEEP_ON_FAIL=0 to force teardown-on-failure (CI,
+# or an unattended sweep where leftover containers would pile up). A PASSED
+# section always tears down (FAIL_COUNT==0), regardless of this flag.
 #
 #   if smoke_keep_on_fail; then
 #     keep_on_fail_notice "container: $NAME" "itb_home: $itb_home"
@@ -57,7 +60,7 @@ poll_until() {
 #   fi
 #   # ... normal teardown ...
 smoke_keep_on_fail() {
-  [[ -n "${SMOKE_KEEP_ON_FAIL:-}" ]] && (( ${FAIL_COUNT:-0} > 0 ))
+  (( ${FAIL_COUNT:-0} > 0 )) && [[ "${SMOKE_KEEP_ON_FAIL:-1}" != "0" ]]
 }
 
 # keep_on_fail_notice <handle> [<handle> ...]
@@ -65,7 +68,7 @@ smoke_keep_on_fail() {
 # operator can probe, then explain teardown was skipped. Call right before the
 # `exit` in a smoke_keep_on_fail branch.
 keep_on_fail_notice() {
-  warn "SMOKE_KEEP_ON_FAIL active + section failed — skipping teardown. Probe:"
+  warn "section failed — preserving state for diagnosis (SMOKE_KEEP_ON_FAIL=0 to force teardown). Probe:"
   local handle
   for handle in "$@"; do
     log "    $handle"

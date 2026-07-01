@@ -88,7 +88,7 @@ exit 0
 | `pass` / `fail` / `skip` | one arg (label) | Explicit result emission. `pass`/`fail` increment counters. `skip` doesn't. |
 | `wait_for_port` | `wait_for_port <port> [timeout]` | Polls 127.0.0.1:port for a LISTEN. Returns 0/1. **Use this instead of `nc -z` — BSD `nc` and GNU `nc` disagree on flags (BSD: `-z host port`, GNU: `-zv host port`); same script breaks crossing macOS↔Linux.** |
 | `poll_until` | `poll_until <success-cmd> <failure-cmd> <timeout> [interval]` | Poll BOTH a success and a failure signal. Returns `0` (success), `2` (failure signal fired — abort fast), `1` (timeout). Pass `""` for failure-cmd to poll success-only (discouraged — see §8 rule 14). |
-| `smoke_keep_on_fail` | `smoke_keep_on_fail` | True when `SMOKE_KEEP_ON_FAIL` is set AND this section failed. Guard teardown with it to leave diagnostic state alive. Pair with `keep_on_fail_notice <handle>...`. See §10. |
+| `smoke_keep_on_fail` | `smoke_keep_on_fail` | True when this section failed — DEFAULT preserves diagnostic state; `SMOKE_KEEP_ON_FAIL=0` forces teardown-on-failure. Guard teardown with it. Pair with `keep_on_fail_notice <handle>...`. See §10. |
 | `term_a_start` | `term_a_start "<slug>" <cmd> [args...]` | Detached tmux pty session. Use for any TTY-required SUT command. |
 | `term_a_wait_port` | `term_a_wait_port <port> [timeout]` | Same as `wait_for_port` but on the active tmux session, with diagnostics on fail. |
 | `term_a_pane_grep` | `term_a_pane_grep "<slug>" "<regex>" [timeout]` | Polls the pane buffer for a regex match. |
@@ -285,7 +285,7 @@ For sections that spawn the SUT in tmux, also tail the pane log: `<topic>/logs/<
 
 Sections tear down on EVERY exit by default (`rm -rf $pdir`, `docker rm`, kill the tmux session). That is correct for a passing run, but on a FAILURE it destroys the one thing you need: the live state that holds the cause. When the failure follows an expensive setup (a cold image build, a real install, a multi-step wizard), re-running to reproduce costs that whole setup again.
 
-Guard teardown with `smoke_keep_on_fail`: when the operator runs with `SMOKE_KEEP_ON_FAIL=1` AND the section recorded a failure, skip teardown and print the live handles to probe.
+Guard teardown with `smoke_keep_on_fail`: **by default**, when a section records a failure it skips teardown and prints the live handles to probe — preserving the evidence is the default because destroying it on failure repeatedly cost a full re-setup per root cause. A PASSING section always tears down. Set `SMOKE_KEEP_ON_FAIL=0` to force teardown-on-failure (CI, or an unattended sweep where leftovers would accumulate).
 
 ```zsh
 sect "§${SECTION_NUM}-teardown"
@@ -301,8 +301,8 @@ exit 0
 
 Two companion rules:
 
-- **Surface the diagnostic INTO `$RUN_LOG` in the failure branch BEFORE any teardown** — even when keep-on-fail is off. Dump the relevant log (redacted; see §13) at the point of failure; never delete a capture file and then assert on it. The default run still tears down, so a diagnostic that only lives in `$pdir` is gone by the time you read the summary.
-- `SMOKE_KEEP_ON_FAIL` leaves global state alive (containers, isolated `$HOME`s). Clean it up by hand once you're done probing — the next run's §13-rule-13 global reset will also clear it, but don't rely on that across unrelated runners.
+- **Surface the diagnostic INTO `$RUN_LOG` in the failure branch BEFORE any teardown** — matters most under `SMOKE_KEEP_ON_FAIL=0`. Dump the relevant log (redacted; see §13) at the point of failure; never delete a capture file and then assert on it. A diagnostic that only lives in `$pdir` is gone the moment teardown runs.
+- A preserved failure leaves global state alive (containers, isolated `$HOME`s). Clean it up by hand once you're done probing — the next run's §13-rule-13 global reset will also clear it, but don't rely on that across unrelated runners. (The smoke-mutation gate blocks you from killing/exec-ing it while a run is still active — wait for the run to exit, then clean.)
 
 ### After a failure
 
