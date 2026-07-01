@@ -103,14 +103,28 @@ _term_a_dump_diagnostics() {
 }
 
 # term_a_capture "<slug>" — dump pane content to RUN_LOG (debugging).
+#
+# On a FAST abort (the SUT bailing on a failed precondition before its runtime
+# is ready), the tmux session is already GONE by the time this runs — but the
+# piped pane-log FILE still holds the process's final output, which is exactly
+# the error the caller needs. Live session → capture the pane; session gone →
+# fall back to tailing the same pipe-log file that pipe-pane writes and that
+# _term_a_dump_diagnostics reads, so the real error survives.
 term_a_capture() {
   local slug="$1"
   local session="smoke-$slug"
   if tmux has-session -t "$session" 2>/dev/null; then
     log "  TERM-A pane (session=$session):"
     tmux capture-pane -t "$session" -p 2>/dev/null | sed 's/^/    /' | tee -a "$RUN_LOG" >/dev/null
+    return 0
+  fi
+  log "  TERM-A pane: session $session not present (exited) — reading piped pane log"
+  local pipe_log="$SCRIPT_DIR/logs/${SECTION_NUM}-${slug}-pane.log"
+  if [[ -s "$pipe_log" ]]; then
+    log "  TERM-A pane log ($pipe_log, last 40 lines):"
+    tail -40 "$pipe_log" | sed 's/^/    /' | tee -a "$RUN_LOG" >/dev/null
   else
-    log "  TERM-A pane: session $session not present"
+    log "  TERM-A pane log: $pipe_log absent or empty — no output captured"
   fi
 }
 
