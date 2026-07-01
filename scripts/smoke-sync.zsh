@@ -37,4 +37,15 @@ case $rc in
   1) print -- "  lib at $abs_install/lib is already current — nothing to do." ;;
   2) ;;  # stderr note already emitted by sync_lib_if_behind
 esac
+
+# Refresh the smoke-mutation gate for this consumer too (idempotent). Project
+# root = the git root at/above the install dir, else the install dir's parent.
+proj_root="${abs_install:h}"
+_d="$abs_install"
+while [[ -n "$_d" && "$_d" != "/" ]]; do
+  [[ -d "$_d/.git" ]] && { proj_root="$_d"; break; }
+  _d="${_d:h}"
+done
+install_mutation_gate_hook "$PAYLOAD" "$proj_root"
+
 exit 0

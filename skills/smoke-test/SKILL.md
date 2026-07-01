@@ -37,6 +37,16 @@ Args (all optional except interactive prompts will fill the gaps):
 - `--topic <name>` — first runner name
 - `--force` — overwrite existing install (sibling backup at `<path>.backup-<ts>/`)
 
+Also installs the **smoke-mutation gate** into the consumer's `.claude/`: copies
+`smoke-active-gate.sh` into `.claude/hooks/` and merges a `PreToolUse`/`Bash` hook
+entry into `.claude/settings.json` (idempotent, non-clobbering — appends, never
+replaces existing hooks; needs `jq`). While a smoke run is active it blocks
+`container/docker exec`, `kill`/`pkill`, and `container delete`/`docker rm` so an
+agent can't contaminate a live run by "diagnosing" it — READ state only. Goes live
+after a `/hooks` reload or restart. Sentinel path defaults to
+`$HOME/.smoke-run-active`; override via `SMOKE_SENTINEL_FILE` (set the same value
+in `.smokerc` so run.zsh and the hook agree).
+
 ### `/smoke-add <topic>`
 
 Walks up from `$PWD` to find `.smokerc`, then scaffolds `<install-path>/<topic>/` with `run.zsh`, `steps/01-example.zsh`, `README.md`, and a `lib/<topic>-helpers.zsh` stub (auto-sourced by `run.zsh` in both scopes). Refuses if `<topic>` dir exists. Version-gate-syncs the shared lib first if it's behind the skill.
@@ -57,6 +67,10 @@ Refreshes ONLY the shared `lib/` + `AUTHORING_GUIDE.md` in an existing install �
 ## File map after `/smoke-init`
 
 ```
+<project-root>/.claude/
+├── hooks/smoke-active-gate.sh   # smoke-mutation gate (PreToolUse/Bash)
+└── settings.json                # PreToolUse hook entry merged in (idempotent)
+
 <install-path>/
 ├── .smokerc                 # SUT_BIN, SUT_REPO, BUILD_CMD, hooks
 ├── lib/                     # shared zsh helpers (don't edit per-runner)
