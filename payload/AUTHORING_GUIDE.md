@@ -92,6 +92,8 @@ exit 0
 | `term_a_start` | `term_a_start "<slug>" <cmd> [args...]` | Detached tmux pty session. Use for any TTY-required SUT command. |
 | `term_a_wait_port` | `term_a_wait_port <port> [timeout]` | Same as `wait_for_port` but on the active tmux session, with diagnostics on fail. |
 | `term_a_pane_grep` | `term_a_pane_grep "<slug>" "<regex>" [timeout]` | Polls the pane buffer for a regex match. |
+| `term_a_wait_ready` | `term_a_wait_ready "<slug>" "<probe-cmd>" [timeout]` | Fail-fast readiness wait: runs `<probe-cmd>` each tick (returns 0 on success); if the launching session dies first, dumps the pane tail and returns 2 instead of hanging to the timeout. Use for a foreground-launched SUT (`itb run`, `docker run -it`) whose container may never come up. Returns 0 ready / 2 launch died / 1 timeout. |
+| `term_a_launch_died` | `term_a_launch_died "<slug>"` | True once the launching term-A session is gone (the launch exited). The primitive behind `term_a_wait_ready`. |
 | `term_a_send` | `term_a_send "<slug>" "<keys>"` | Type a line into the pty + Enter. Empty string → bare Enter (accept a default). For scripting an interactive SUT's prompts. |
 | `term_a_answer` | `term_a_answer "<slug>" "<prompt-regex>" "<reply>" [timeout]` | Wait for `<prompt-regex>` in the pane, then send `<reply>`+Enter. Returns 1 on timeout. See §12. |
 | `term_a_close` | `term_a_close "<slug>"` | `tmux kill-session`; sends SIGHUP to spawned process tree. |
