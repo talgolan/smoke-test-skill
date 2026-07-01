@@ -64,6 +64,32 @@ test("sentinel active → a benign command with a mutating verb in a SIBLING fie
   rmSync(sentinel, { force: true });
 });
 
+test("stale sentinel (dead runner pid) → allowed + sentinel unlinked", () => {
+  // SIGKILL/OOM/power-loss leaves the sentinel with the EXIT trap unfired. The
+  // hook must read pid= and treat a dead runner as inactive, not wedge forever.
+  writeFileSync(sentinel, "pid=999999 started=100 runner=/x");
+  const res = spawnSync("bash", [HOOK], {
+    input: JSON.stringify({ tool_input: { command: "docker exec foo sh" } }),
+    encoding: "utf8",
+    env: { ...process.env, SMOKE_SENTINEL_FILE: sentinel },
+  });
+  expect(res.stdout.includes('"deny"')).toBe(false); // allowed
+  expect(existsSync(sentinel)).toBe(false); // stale file unlinked
+});
+
+test("malformed sentinel (no pid) → fail-safe, keeps gating", () => {
+  writeFileSync(sentinel, "garbage with no pid line");
+  expect(runHook("docker exec foo sh", sentinel)).toBe("deny");
+  rmSync(sentinel, { force: true });
+});
+
+test("live runner pid → gate active (mutating denied)", () => {
+  // Use this test process's pid as a guaranteed-live runner pid.
+  writeFileSync(sentinel, `pid=${process.pid} started=100 runner=/x`);
+  expect(runHook("docker exec foo sh", sentinel)).toBe("deny");
+  rmSync(sentinel, { force: true });
+});
+
 test("sentinel active → read-only verbs and override are allowed", () => {
   writeFileSync(sentinel, "pid=1 started=0 runner=x");
   for (const cmd of [

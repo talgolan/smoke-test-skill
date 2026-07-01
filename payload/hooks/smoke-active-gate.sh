@@ -39,6 +39,20 @@ SENTINEL="${SMOKE_SENTINEL_FILE:-$HOME/.smoke-run-active}"
 # No active smoke run → nothing to protect.
 [ -f "$SENTINEL" ] || exit 0
 
+# Liveness: the sentinel records `pid=<runner-pid>`. If that process is gone the
+# run died without its EXIT trap firing (SIGKILL, OOM, power loss) — a stale
+# sentinel must NOT wedge every later exec/kill/rm. Treat a dead pid as inactive:
+# unlink the stale file and allow. A malformed/absent pid → fail SAFE (keep
+# gating), since we can't prove the run is dead.
+# Use `ps -p` (not `kill -0`) for liveness: it reports EXISTENCE regardless of
+# process owner, whereas `kill -0` fails with EPERM on a live process the caller
+# doesn't own — which would false-positive "dead" and drop the gate.
+sentinel_pid="$(sed -nE 's/.*(^|[[:space:]])pid=([0-9]+).*/\2/p' "$SENTINEL" 2>/dev/null | head -1 || true)"
+if [ -n "${sentinel_pid:-}" ] && ! ps -p "$sentinel_pid" >/dev/null 2>&1; then
+  rm -f "$SENTINEL" 2>/dev/null || true
+  exit 0
+fi
+
 payload="$(cat || true)"
 [ -z "${payload:-}" ] && exit 0
 
@@ -51,7 +65,7 @@ if command -v jq >/dev/null 2>&1; then
 else
   cmd="$(printf '%s' "$payload" \
     | sed -nE 's/.*"command"[[:space:]]*:[[:space:]]*"(.*)/\1/p' \
-    | head -1)"
+    | head -1 || true)"
   # Un-escape the JSON string body so word-boundary greps see real text.
   cmd="$(printf '%s' "$cmd" | sed -E 's/\\n/\n/g; s/\\t/\t/g; s/\\"/"/g; s/\\\\/\\/g')"
 fi
@@ -61,7 +75,15 @@ fi
 case "$cmd" in *SMOKE_GATE_OVERRIDE=1*) exit 0 ;; esac
 
 deny() {
-  printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}\n' "$1"
+  # Build the JSON with jq when available so a sentinel path containing " or \
+  # can't corrupt the reason string; else emit with the path's quotes/backslashes
+  # stripped (defensive — the default paths never contain them).
+  if command -v jq >/dev/null 2>&1; then
+    jq -cn --arg r "$1" '{hookSpecificOutput:{hookEventName:"PreToolUse",permissionDecision:"deny",permissionDecisionReason:$r}}'
+  else
+    local safe="${1//\\/}"; safe="${safe//\"/}"
+    printf '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"%s"}}\n' "$safe"
+  fi
   exit 0
 }
 
