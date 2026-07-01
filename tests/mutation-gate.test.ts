@@ -49,6 +49,21 @@ test("sentinel active → mutating verbs are denied", () => {
   }
 });
 
+test("sentinel active → a benign command with a mutating verb in a SIBLING field is allowed", () => {
+  // Regression: the greedy sed capture pulled later JSON fields into the match,
+  // so a benign `echo hi` with an unrelated sibling field mentioning `docker rm`
+  // was wrongly denied. jq extraction stops at the command boundary.
+  writeFileSync(sentinel, "pid=1 started=0 runner=x");
+  const payload = '{"tool_input":{"command":"echo hi"},"description":"docker rm foo"}';
+  const res = spawnSync("bash", [HOOK], {
+    input: payload,
+    encoding: "utf8",
+    env: { ...process.env, SMOKE_SENTINEL_FILE: sentinel },
+  });
+  expect(res.stdout.includes('"deny"') ? "deny" : "allow").toBe("allow");
+  rmSync(sentinel, { force: true });
+});
+
 test("sentinel active → read-only verbs and override are allowed", () => {
   writeFileSync(sentinel, "pid=1 started=0 runner=x");
   for (const cmd of [
@@ -90,6 +105,45 @@ test("smoke-init wires the mutation gate into the consumer .claude/", () => {
   expect(cmds.some((c) => c.includes("smoke-active-gate.sh"))).toBe(true);
 
   rmSync(proj, { recursive: true, force: true });
+});
+
+test("install_mutation_gate_hook returns 1 and preserves an invalid settings.json", () => {
+  const proj = mkdtempSync(join(tmpdir(), "smoke-gate-bad-"));
+  mkdirSync(join(proj, ".claude"), { recursive: true });
+  const bad = "{ this is not json";
+  writeFileSync(join(proj, ".claude", "settings.json"), bad);
+
+  const payload = join(SKILL_ROOT, "payload");
+  const libSync = join(SKILL_ROOT, "scripts", "lib-sync.zsh");
+  const res = spawnSync("zsh", ["-c",
+    `source '${libSync}'\ninstall_mutation_gate_hook '${payload}' '${proj}'`],
+    { encoding: "utf8" });
+  expect(res.status).toBe(1);
+  expect(res.stderr).toContain("not valid JSON");
+  // Hook still copied (fail-safe), original file untouched.
+  expect(existsSync(join(proj, ".claude", "hooks", "smoke-active-gate.sh"))).toBe(true);
+  expect(readFileSync(join(proj, ".claude", "settings.json"), "utf8")).toBe(bad);
+  rmSync(proj, { recursive: true, force: true });
+});
+
+test("project_root_of walks to the git root, else falls back to the start dir", () => {
+  const libSync = join(SKILL_ROOT, "scripts", "lib-sync.zsh");
+  const withGit = mkdtempSync(join(tmpdir(), "smoke-root-"));
+  mkdirSync(join(withGit, ".git"), { recursive: true });
+  mkdirSync(join(withGit, "a", "b"), { recursive: true });
+  const noGit = mkdtempSync(join(tmpdir(), "smoke-noroot-"));
+  const deep = join(noGit, "x", "y");
+  mkdirSync(deep, { recursive: true });
+
+  const r1 = spawnSync("zsh", ["-c",
+    `source '${libSync}'\nproject_root_of '${join(withGit, "a", "b")}'`], { encoding: "utf8" });
+  expect(r1.stdout.trim()).toBe(withGit);
+  const r2 = spawnSync("zsh", ["-c",
+    `source '${libSync}'\nproject_root_of '${deep}'`], { encoding: "utf8" });
+  expect(r2.stdout.trim()).toBe(deep);
+
+  rmSync(withGit, { recursive: true, force: true });
+  rmSync(noGit, { recursive: true, force: true });
 });
 
 test("hook wiring is idempotent and preserves existing hooks + other keys", () => {

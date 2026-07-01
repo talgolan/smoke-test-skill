@@ -37,6 +37,18 @@ sync_lib() {
   print -- "$version" > "$abs_install/lib/.skill-version"
 }
 
+# project_root_of <start-dir> — echo the consumer project root: the git root at
+# or above <start-dir>, else <start-dir> itself. The mutation-gate hook + its
+# settings.json entry live under <root>/.claude.
+project_root_of() {
+  local d="$1"
+  while [[ -n "$d" && "$d" != "/" ]]; do
+    [[ -d "$d/.git" ]] && { print -r -- "$d"; return 0; }
+    d="${d:h}"
+  done
+  print -r -- "$1"
+}
+
 # install_mutation_gate_hook <payload> <project_root>
 #
 # Install the smoke-mutation-gate PreToolUse hook into the CONSUMER project so an
@@ -65,14 +77,20 @@ install_mutation_gate_hook() {
     print -u2 "  note: jq not found — copied smoke-active-gate.sh but did NOT wire settings.json."
     print -u2 "  Add this PreToolUse hook to $settings by hand:"
     print -u2 "    {\"matcher\":\"Bash\",\"hooks\":[{\"type\":\"command\",\"command\":$gatecmd}]}"
-    return 0
+    return 1
   fi
 
   local current tmp
-  # Read the existing settings (or {} when absent/empty/invalid) into a var so
-  # jq consumes a single well-formed object on stdin — no process substitution.
+  # Read the existing settings (or {} when absent/empty) into a var so jq
+  # consumes a single well-formed object on stdin — no process substitution.
   current="$(cat "$settings" 2>/dev/null)"
   [[ -z "$current" ]] && current='{}'
+  # Guard against an invalid existing settings.json — jq would fail the merge
+  # and we'd silently leave it unwired. Name the cause instead.
+  if ! printf '%s' "$current" | jq empty >/dev/null 2>&1; then
+    print -u2 "  WARNING: $settings is not valid JSON — copied the hook but skipped wiring. Fix the file, then re-run /smoke-sync."
+    return 1
+  fi
   tmp="$(mktemp)"
   # Add the entry only if no existing PreToolUse hook already points at
   # smoke-active-gate.sh (idempotent); append, never replace other hooks.

@@ -42,12 +42,20 @@ SENTINEL="${SMOKE_SENTINEL_FILE:-$HOME/.smoke-run-active}"
 payload="$(cat || true)"
 [ -z "${payload:-}" ] && exit 0
 
-cmd="$(printf '%s' "$payload" \
-  | sed -nE 's/.*"command"[[:space:]]*:[[:space:]]*"(.*)/\1/p' \
-  | head -1)"
+# Extract the Bash command. Prefer jq — it parses the JSON correctly (decodes
+# \n \" \uXXXX, and stops at the field boundary). The sed fallback is only for
+# hosts without jq; it is greedy (a sibling field after "command" bleeds into
+# the match) so it is deliberately the last resort, not the default.
+if command -v jq >/dev/null 2>&1; then
+  cmd="$(printf '%s' "$payload" | jq -r '.tool_input.command // .command // empty' 2>/dev/null || true)"
+else
+  cmd="$(printf '%s' "$payload" \
+    | sed -nE 's/.*"command"[[:space:]]*:[[:space:]]*"(.*)/\1/p' \
+    | head -1)"
+  # Un-escape the JSON string body so word-boundary greps see real text.
+  cmd="$(printf '%s' "$cmd" | sed -E 's/\\n/\n/g; s/\\t/\t/g; s/\\"/"/g; s/\\\\/\\/g')"
+fi
 [ -z "$cmd" ] && exit 0
-# Un-escape the JSON string body so word-boundary greps see real text.
-cmd="$(printf '%s' "$cmd" | sed -E 's/\\n/\n/g; s/\\t/\t/g; s/\\"/"/g; s/\\\\/\\/g')"
 
 # Explicit override.
 case "$cmd" in *SMOKE_GATE_OVERRIDE=1*) exit 0 ;; esac

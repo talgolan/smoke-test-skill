@@ -113,15 +113,9 @@ RUN_LOG_KEEP=3
 EOF
 
 # Install the smoke-mutation gate hook into the consumer's .claude/ (Port 2c).
-# Project root = the git root at/above $PWD, else $PWD. The hook + its
-# settings.json entry live under <project-root>/.claude, not the install dir.
-proj_root="$PWD"
-_d="$PWD"
-while [[ -n "$_d" && "$_d" != "/" ]]; do
-  [[ -d "$_d/.git" ]] && { proj_root="$_d"; break; }
-  _d="${_d:h}"
-done
-install_mutation_gate_hook "$PAYLOAD" "$proj_root"
+# Root = git root at/above $PWD, else $PWD. Hook + settings.json entry live under
+# <root>/.claude, not the install dir.
+install_mutation_gate_hook "$PAYLOAD" "$(project_root_of "$PWD")"
 
 # Delegate first-runner scaffold to smoke-add.zsh
 "$SCRIPT_DIR/smoke-add.zsh" --install-path "$install_path" --topic "$topic" --from-init || exit $?
